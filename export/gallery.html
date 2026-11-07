@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixelforge Demo Sprites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: sticky control bar, then one section per character with a wrapping grid of live animation tiles. */
+  :root {
+    --bg: #eef0f5; --surface: #ffffff; --ink: #181425; --muted: #5a6988; --line: #c0cbdc; --accent: #a22633;
+    --chip: #e2e6ef;
+    --display: "Silkscreen", "Courier New", monospace;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141220; --surface: #222740; --ink: #e8ebf3; --muted: #8b9bb4; --line: #3a4466; --accent: #f6757a;
+      --chip: #2d3352; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141220; --surface: #222740; --ink: #e8ebf3; --muted: #8b9bb4; --line: #3a4466; --accent: #f6757a;
+    --chip: #2d3352; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; }
+
+  header.top { padding-block: 32px 20px; display: grid; gap: 6px; }
+  .eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 { font: 400 clamp(26px, 5vw, 40px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+  .summary { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+         border-bottom: 1px solid var(--line); }
+  .bar .wrap { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding-block: 10px; }
+  .group { display: flex; align-items: center; gap: 8px; }
+  .group > span { font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; background: var(--chip); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: transparent; color: var(--ink); font: 500 13px var(--body);
+                padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .18); }
+  .btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 13px var(--body);
+         padding: 5px 12px; border-radius: 8px; cursor: pointer; }
+  .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
+  button:focus-visible, input:focus-visible, canvas:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  nav.chars { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav.chars a { font: 500 13px var(--mono); color: var(--ink); text-decoration: none; background: var(--chip);
+                padding: 3px 9px; border-radius: 999px; }
+
+  main { display: grid; gap: 40px; padding-block: 28px 48px; }
+  section.char { display: grid; gap: 16px; scroll-margin-top: 80px; }
+  .char-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+  .char-head h2 { font: 400 24px/1.2 var(--display); margin: 0; }
+  .char-head .meta { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 3px; }
+  .swatches i { width: 16px; height: 16px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2);
+                display: block; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile)), 1fr)); gap: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+          display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .stage { display: grid; place-items: center; border-radius: 8px; overflow: hidden; cursor: pointer; }
+  .stage canvas { image-rendering: pixelated; display: block; max-width: 100%; height: auto; }
+  .tile-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .tile-head strong { font-weight: 600; }
+  .badge { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px;
+           border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .badge.once { color: var(--accent); }
+  .facts { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; display: flex;
+           flex-wrap: wrap; gap: 2px 12px; }
+  .facts code { color: var(--ink); flex-basis: 100%; }
+  .strip { display: flex; flex-wrap: wrap; gap: 6px 4px; }
+  .strip button { border: 0; padding: 0; background: none; cursor: pointer; display: grid; gap: 2px;
+                  justify-items: center; font: 10px var(--mono); color: var(--muted); }
+  .strip canvas { image-rendering: pixelated; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line);
+                  outline: 2px solid transparent; outline-offset: 1px; }
+  .strip button.on canvas { outline-color: var(--accent); }
+  .strip button.on { color: var(--ink); }
+
+  footer { color: var(--muted); font-size: 13px; padding-block: 0 40px; display: grid; gap: 8px; }
+  footer pre { font: 12px/1.6 var(--mono); background: var(--surface); border: 1px solid var(--line);
+               border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <div class="eyebrow">Sprite gallery</div>
+  <h1 id="game"></h1>
+  <div class="summary" id="summary"></div>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="group"><span>Zoom</span><div class="seg" id="zoom"></div></div>
+    <div class="group"><span>Stage</span><div class="seg" id="stagebg"></div></div>
+    <button class="btn" id="playall" type="button">Pause all</button>
+    <label class="check"><input type="checkbox" id="repeat" checked> Repeat one-shots</label>
+    <label class="check" title="Body box (yellow), hurtboxes (green), hitboxes on active frames (red)"><input type="checkbox" id="boxes"> Hit boxes</label>
+    <nav class="chars" id="chars" aria-label="Characters"></nav>
+  </div>
+</div>
+
+<main class="wrap" id="main"></main>
+
+<footer class="wrap">
+  <div>Click a stage to pause that animation. Click a frame below it to inspect that frame. Animations marked
+    <b>once</b> play a single time in the game. Here they repeat after a short pause.</div>
+  <pre id="usage"></pre>
+</footer>
+
+<script>
+const DATA = {"game":"Pixelforge Demo","generated":"2026-11-07","sprites":[{"name":"knight","w":64,"h":48,"origin":[32,48],"body":[24,18,16,30],"class":"humanoid","palette":[["k","#181425","outline"],["d","#3a4466","dark_slate"],["m","#5a6988","slate"],["l","#8b9bb4","gray"],["h","#c0cbdc","light_gray"],["w","#ffffff","white"],["r","#a22633","crimson"],["R","#e43b44","red"],["s","#e8b796","skin"],["S","#c28569","skin_shadow"],["b","#733e39","dark_brown"],["n","#b86f50","brown"],["y","#feae34","amber"],["B","#3e2731","deep_brown"]],"sheet":"data:image/png;base64,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","anims":[{"name":"idle","loop":true,"fps":4,"frames":[{"x":0,"y":0,"d":400,"hurt":[[25,20,12,27]],"hit":[]},{"x":65,"y":0,"d":400,"hurt":[[25,21,12,26]],"hit":[]}]},{"name":"walk","loop":true,"fps":10,"frames":[{"x":0,"y":49,"d":100,"hurt":[[25,20,15,27]],"hit":[]},{"x":65,"y":49,"d":100,"hurt":[[25,21,15,26]],"hit":[]},{"x":130,"y":49,"d":100,"hurt":[[25,19,12,28]],"hit":[]},{"x":195,"y":49,"d":100,"hurt":[[25,20,15,27]],"hit":[]},{"x":260,"y":49,"d":100,"hurt":[[25,21,15,26]],"hit":[]},{"x":325,"y":49,"d":100,"hurt":[[25,19,12,28]],"hit":[]}]},{"name":"attack","loop":false,"fps":12,"frames":[{"x":0,"y":98,"d":220,"hurt":[[25,20,12,27]],"hit":[]},{"x":65,"y":98,"d":60,"hurt":[[25,20,15,27]],"hit":[[23,9,20,7],[41,11,8,8],[45,15,9,10],[41,23,9,8],[35,27,9,9]]},{"x":130,"y":98,"d":140,"hurt":[[26,20,14,27]],"hit":[[36,32,7,5],[41,34,20,6],[39,35,4,6]]},{"x":195,"y":98,"d":160,"hurt":[[25,20,15,27]],"hit":[]},{"x":260,"y":98,"d":200,"hurt":[[25,20,12,27]],"hit":[]}]}]}]};
+const ZOOMS = [2, 3, 4, 6];
+const STAGES = { Checker: 'check', Night: '#262b44', Sky: '#9fd0f0', Grass: '#63c74d' };
+const REPEAT_PAUSE_MS = 500;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('pf-gallery') || '{}'); } catch { return {}; } })();
+const opts = { zoom: ZOOMS.includes(prefs.zoom) ? prefs.zoom : 4, stage: prefs.stage in STAGES ? prefs.stage : 'Checker' };
+const save = () => { try { localStorage.setItem('pf-gallery', JSON.stringify(opts)); } catch {} };
+const $ = (id) => document.getElementById(id);
+const tiles = [];
+
+function paint(ctx, tile, i, z) {
+  const s = tile.sprite, f = tile.anim.frames[i], bg = STAGES[opts.stage];
+  const w = s.w * z, h = s.h * z;
+  if (ctx.canvas.width !== w) { ctx.canvas.width = w; ctx.canvas.height = h; }
+  ctx.imageSmoothingEnabled = false;
+  if (bg === 'check') {
+    for (let y = 0; y < s.h; y += 2) for (let x = 0; x < s.w; x += 2) {
+      ctx.fillStyle = ((x + y) / 2) % 2 ? '#d9dde6' : '#eef0f5';
+      ctx.fillRect(x * z, y * z, 2 * z, 2 * z);
+    }
+  } else { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+  ctx.drawImage(s.img, f.x, f.y, s.w, s.h, 0, 0, w, h);
+}
+
+function drawBoxes(ctx, tile, i, z) {
+  const f = tile.anim.frames[i], [bx, by, bw, bh] = tile.sprite.body;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = '#fac828';
+  ctx.strokeRect(bx * z + 0.5, by * z + 0.5, bw * z - 1, bh * z - 1);
+  ctx.setLineDash([]);
+  ctx.lineWidth = 2;
+  for (const [kind, color] of [['hurt', '#28c85a'], ['hit', '#f0283c']]) {
+    ctx.strokeStyle = color;
+    for (const [x, y, w, h] of f[kind]) ctx.strokeRect(x * z + 1, y * z + 1, w * z - 2, h * z - 2);
+  }
+}
+
+function drawTile(t) {
+  paint(t.ctx, t, t.frame, opts.zoom);
+  if ($('boxes').checked) drawBoxes(t.ctx, t, t.frame, opts.zoom);
+  t.strip.forEach((b, i) => b.classList.toggle('on', i === t.frame));
+}
+
+function buildTile(sprite, anim) {
+  const el = document.createElement('article');
+  el.className = 'tile';
+  const total = anim.frames.reduce((a, f) => a + f.d, 0);
+  el.innerHTML = `
+    <div class="stage" role="button" tabindex="0" aria-label="Pause or play ${anim.name}"><canvas></canvas></div>
+    <div class="tile-head"><strong>${anim.name}</strong>
+      <span class="badge ${anim.loop ? '' : 'once'}">${anim.loop ? 'loops' : 'once'}</span></div>
+    <div class="facts"><span>${anim.frames.length} frames</span><span>${anim.fps} fps</span><span>${total} ms</span>
+      <code>${sprite.name}_${anim.name}</code></div>
+    <div class="strip"></div>`;
+  const t = { sprite, anim, el, frame: 0, acc: 0, playing: !reduceMotion, ctx: el.querySelector('canvas').getContext('2d'), strip: [] };
+  const strip = el.querySelector('.strip');
+  anim.frames.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = `Frame ${i + 1}: ${f.d} ms`;
+    const c = document.createElement('canvas');
+    b.append(c, document.createTextNode(f.d));
+    b.onclick = () => { t.playing = false; t.frame = i; t.acc = 0; drawTile(t); };
+    strip.append(b);
+    t.strip.push(b);
+  });
+  const toggle = () => { t.playing = !t.playing; if (t.playing && t.frame === anim.frames.length - 1 && !anim.loop) t.frame = 0; };
+  const stage = el.querySelector('.stage');
+  stage.onclick = toggle;
+  stage.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+  tiles.push(t);
+  return el;
+}
+
+function paintStrips() {
+  for (const t of tiles) t.strip.forEach((b, i) => paint(b.querySelector('canvas').getContext('2d'), t, i, t.sprite.w > 40 ? 1 : 2));
+}
+
+function layout() {
+  const maxW = Math.max(...DATA.sprites.map((s) => s.w));
+  document.documentElement.style.setProperty('--tile', `${Math.max(260, maxW * opts.zoom + 26)}px`);
+  tiles.forEach(drawTile);
+}
+
+function segmented(id, values, current, onPick) {
+  const seg = $(id);
+  seg.innerHTML = '';
+  for (const [label, value] of values) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(value === current()));
+    b.onclick = () => { onPick(value); [...seg.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b))); save(); };
+    seg.append(b);
+  }
+}
+
+async function init() {
+  const sprites = DATA.sprites;
+  const animCount = sprites.reduce((a, s) => a + s.anims.length, 0);
+  const frameCount = sprites.reduce((a, s) => a + s.anims.reduce((b, an) => b + an.frames.length, 0), 0);
+  $('game').textContent = DATA.game;
+  $('summary').textContent = `${sprites.length} character${sprites.length === 1 ? '' : 's'} · ${animCount} animations · ` +
+    `${frameCount} frames · exported ${DATA.generated}`;
+
+  await Promise.all(sprites.map((s) => { s.img = new Image(); s.img.src = s.sheet; return s.img.decode(); }));
+
+  for (const s of sprites) {
+    const sec = document.createElement('section');
+    sec.className = 'char';
+    sec.id = s.name;
+    sec.innerHTML = `<div class="char-head"><h2>${s.name}</h2>
+      <span class="meta">${s.class ? s.class + ' · ' : ''}${s.w}×${s.h} px canvas · body ${s.body[2]}×${s.body[3]} · ${s.palette.length} colors · ${s.anims.length} animations</span>
+      <div class="swatches">${s.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
+      <div class="grid"></div>`;
+    const grid = sec.querySelector('.grid');
+    s.anims.forEach((a) => grid.append(buildTile(s, a)));
+    $('main').append(sec);
+    if (sprites.length > 1) {
+      const a = document.createElement('a');
+      a.href = `#${s.name}`;
+      a.textContent = s.name;
+      $('chars').append(a);
+    }
+  }
+
+  segmented('zoom', ZOOMS.map((z) => [`${z}×`, z]), () => opts.zoom, (z) => { opts.zoom = z; layout(); });
+  segmented('stagebg', Object.keys(STAGES).map((k) => [k, k]), () => opts.stage, (k) => { opts.stage = k; paintStrips(); layout(); });
+  $('playall').onclick = () => {
+    const anyPlaying = tiles.some((t) => t.playing);
+    tiles.forEach((t) => { t.playing = !anyPlaying; });
+    $('playall').textContent = anyPlaying ? 'Play all' : 'Pause all';
+  };
+  if (reduceMotion) $('playall').textContent = 'Play all';
+  $('boxes').onchange = () => tiles.forEach(drawTile);
+
+  const first = sprites[0];
+  $('usage').textContent = [
+    `// Phaser 3, with pixelArt: true. Files: export/<name>.png + export/<name>.json + export/pixelforge.js`,
+    `import { loadPixelforge, createPixelforgeAnims, enablePixelforgeHits } from './export/pixelforge.js';`,
+    `preload() { ${sprites.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
+    `create()  { ${sprites.map((s) => `createPixelforgeAnims(this, '${s.name}');`).join(' ')}`,
+    `            const hero = this.add.sprite(200, 150, '${first.name}').play('${first.name}_${first.anims[0].name}');`,
+    `            enablePixelforgeHits(this, hero, () => enemies, (enemy) => enemy.takeDamage(1)); }`,
+  ].join('\n');
+
+  paintStrips();
+  layout();
+  let last = performance.now();
+  const tick = (now) => {
+    const dt = now - last;
+    last = now;
+    for (const t of tiles) {
+      if (!t.playing) continue;
+      const n = t.anim.frames.length;
+      const hold = (i) => t.anim.frames[i].d + (i === n - 1 && !t.anim.loop ? REPEAT_PAUSE_MS : 0);
+      t.acc += dt;
+      let changed = false;
+      while (t.acc >= hold(t.frame)) {
+        t.acc -= hold(t.frame);
+        if (t.frame === n - 1 && !t.anim.loop && !$('repeat').checked) { t.acc = 0; t.playing = false; break; }
+        t.frame = (t.frame + 1) % n;
+        changed = true;
+      }
+      if (changed) drawTile(t);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+init();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,223 @@
+{
+  "name": "knight",
+  "class": "humanoid",
+  "palette": {
+    "k": "outline",
+    "d": "dark_slate",
+    "m": "slate",
+    "l": "gray",
+    "h": "light_gray",
+    "w": "white",
+    "r": "crimson",
+    "R": "red",
+    "s": "skin",
+    "S": "skin_shadow",
+    "b": "dark_brown",
+    "n": "brown",
+    "y": "amber",
+    "B": "deep_brown"
+  },
+  "roles": {
+    "smear_trail": "none",
+    "sword*": "hit",
+    "smear": "hit"
+  },
+  "hit_pad": 1,
+  "hurt_pad": -1,
+  "animations": {
+    "idle": {
+      "fps": 4,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "legs_stand",
+            "body",
+            "sword"
+          ],
+          "duration": 400
+        },
+        {
+          "layers": [
+            "legs_stand",
+            "body_breathe",
+            "sword"
+          ],
+          "duration": 400
+        }
+      ]
+    },
+    "walk": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "legs_contact_a",
+            {
+              "layers": [
+                "body",
+                "sword"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "legs_contact_a",
+            {
+              "from": {
+                "layers": [
+                  "body",
+                  "sword"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "legs_pass_b",
+            {
+              "from": {
+                "layers": [
+                  "body",
+                  "sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "legs_contact_b",
+            {
+              "layers": [
+                "body",
+                "sword"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "legs_contact_b",
+            {
+              "from": {
+                "layers": [
+                  "body",
+                  "sword"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "legs_pass_a",
+            {
+              "from": {
+                "layers": [
+                  "body",
+                  "sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            "legs_stand",
+            "torso",
+            {
+              "from": "sword",
+              "flip": "h",
+              "offset": [
+                -3,
+                -1
+              ]
+            },
+            "arm_back"
+          ],
+          "duration": 220
+        },
+        {
+          "layers": [
+            "legs_contact_a",
+            "smear_trail",
+            "smear",
+            "torso",
+            {
+              "from": "sword",
+              "offset": [
+                5,
+                -6
+              ]
+            },
+            "arm_up"
+          ],
+          "duration": 60,
+          "active": true
+        },
+        {
+          "layers": [
+            "legs_contact_a",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "sword_fwd",
+                  "arm_fwd"
+                ]
+              },
+              "offset": [
+                1,
+                0
+              ]
+            }
+          ],
+          "duration": 140,
+          "active": true
+        },
+        {
+          "layers": [
+            "legs_contact_a",
+            "body",
+            "sword_down"
+          ],
+          "duration": 160
+        },
+        {
+          "layers": [
+            "legs_stand",
+            "body",
+            "sword"
+          ],
+          "duration": 200
+        }
+      ]
+    }
+  }
+}

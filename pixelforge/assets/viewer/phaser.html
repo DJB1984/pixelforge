@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pixelforge Phaser test</title>
+<style>
+  body { margin: 0; background: #1b1d23; color: #ddd; font: 14px system-ui, sans-serif; }
+  p { margin: 12px 16px; max-width: 900px; }
+  label { margin: 0 16px; display: inline-flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<p>Every exported sprite, loaded through Phaser's real <code>load.aseprite</code> + <code>createFromAseprite</code> path.
+  Top rows: each animation. Sparring rows: each attack on repeat against dummies in reach (front), out of reach (far)
+  and directly behind. Boxes: <b style="color:#fac828">body</b>, <b style="color:#28c85a">hurt</b>,
+  <b style="color:#f0283c">hit</b>. The pink line is the origin (feet).</p>
+<label><input type="checkbox" id="boxes" checked> show boxes</label>
+<div id="game"></div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script type="module">
+import { loadPixelforge, createPixelforgeAnims, enablePixelforgeHits, drawPixelforgeBoxes } from '../phaser/pixelforge.js';
+
+const index = await (await fetch('../export/index.json', { cache: 'no-store' })).json();
+const SCALE = 3;
+
+class TestScene extends Phaser.Scene {
+  preload() {
+    for (const name of index.sprites) loadPixelforge(this, name, '../export/');
+  }
+  create() {
+    const lines = this.add.graphics();
+    this.debug = this.add.graphics().setDepth(10);
+    this.shown = [];
+    window.pixelforgeReport = [];
+    window.pixelforgeHits = {};
+    let y = 20;
+    for (const name of index.sprites) {
+      const anims = createPixelforgeAnims(this, name);
+      const frame = this.textures.getFrame(name, '0');
+      const fw = frame.realWidth * SCALE, fh = frame.realHeight * SCALE;
+      // one row of every animation
+      y += fh + 20;
+      lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
+      this.add.text(8, y - fh - 16, name, { fontSize: '14px', color: '#ddd' });
+      anims.forEach((anim, col) => {
+        const x = 20 + fw / 2 + col * (fw + 10);
+        const s = this.add.sprite(x, y, name).setScale(SCALE).play(anim.key);
+        this.shown.push(s);
+        this.add.text(x, y + 4, `${anim.key}  ${anim.frames.length}f ${anim.repeat === -1 ? 'loop' : 'once'}`,
+          { fontSize: '12px', color: '#aaa' }).setOrigin(0.5, 0);
+        window.pixelforgeReport.push({ key: anim.key, frames: anim.frames.length, repeat: anim.repeat,
+          originX: s.originX, originY: s.originY });
+      });
+      // a sparring row per attack (animations with active frames)
+      const data = this.cache.json.get(name);
+      for (const anim of anims) {
+        const tag = data.meta.frameTags.find((t) => t.name === anim.key);
+        const hasActive = Object.values(data.frames).slice(tag.from, tag.to + 1).some((f) => f.pixelforge?.hit?.length);
+        if (!hasActive) continue;
+        y += fh + 40;
+        lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
+        const ax = 40 + fw;
+        const attacker = this.add.sprite(ax, y, name).setScale(SCALE).play({ key: anim.key, repeat: -1 });
+        const idle = anims.find((a) => a.key.endsWith('_idle'))?.key ?? anims[0].key;
+        const dummies = { front: 30, far: 56, behind: -24 }; // distance from attacker, in sprite pixels
+        const targets = Object.entries(dummies).map(([label, d]) => {
+          const t = this.add.sprite(ax + d * SCALE, y, name).setScale(SCALE).setFlipX(d > 0).play(idle).setAlpha(0.75);
+          t.label = label;
+          window.pixelforgeHits[`${anim.key}:${label}`] = 0;
+          const txt = this.add.text(t.x, y + 4, `${label}: 0`, { fontSize: '12px', color: '#aaa' }).setOrigin(0.5, 0);
+          t.counter = txt;
+          return t;
+        });
+        enablePixelforgeHits(this, attacker, targets, (t) => {
+          const k = `${anim.key}:${t.label}`;
+          window.pixelforgeHits[k] += 1;
+          t.counter.setText(`${t.label}: ${window.pixelforgeHits[k]}`).setColor('#f0283c');
+          t.setTintFill(0xffffff);
+          this.time.delayedCall(80, () => t.clearTint());
+        });
+        let swings = 0;
+        attacker.on('animationrepeat', () => { swings += 1; window.pixelforgeHits[`${anim.key}:swings`] = swings; });
+        this.add.text(8, y - fh - 16, `sparring: ${anim.key} (repeating)`, { fontSize: '14px', color: '#ddd' });
+        this.shown.push(attacker, ...targets);
+      }
+    }
+    this.scale.resize(this.scale.width, y + 40);
+  }
+  update() {
+    this.debug.clear();
+    if (document.getElementById('boxes').checked) drawPixelforgeBoxes(this.debug, this.shown);
+  }
+}
+
+window.pixelforgeGame = new Phaser.Game({
+  type: Phaser.AUTO, parent: 'game', pixelArt: true, backgroundColor: '#2a2d36',
+  width: Math.min(window.innerWidth, 1400), height: 600, scene: TestScene,
+});
+</script>
+</body>
+</html>
