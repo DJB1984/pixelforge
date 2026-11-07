@@ -61,6 +61,8 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `import PNG NAME [--cell 32x32]` | PNG/sheet/atlas → frames (reuses existing palette keys) |
 | `export [S...] [--all]` | sheet + JSON + Phaser helper (refuses if `check` has errors) |
 | `gallery` | `export/gallery.html`: one self-contained page with every character playing every animation |
+| `upgrade [--dry-run]` | after the pixelforge repo is updated (`git pull`): refresh this guide, add missing scaffolding, re-export. If it writes `CLAUDE.pixelforge-new.md`, merge that into CLAUDE.md and delete it |
+| `--version` | installed pixelforge version (`pixelforge.json` records the version this game was last upgraded to) |
 | `serve [--port 8000]` | then open `/viewer/` (frame player) or `/viewer/phaser.html` (real Phaser test) |
 
 ## The authoring loop (do this every time)

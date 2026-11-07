@@ -22,4 +22,18 @@ pixelforge gallery           # export/gallery.html: one file, every character, s
 pixelforge serve             # http://127.0.0.1:8000/viewer/ (frame player) and /viewer/phaser.html
 ```
 
+## Updating
+```
+cd pixelforge && git pull        # the editable install picks it up immediately, for every game
+cd my-game/art && pixelforge upgrade
+```
+`upgrade` brings one game up to the installed version:
+- Refreshes its Claude guide (`CLAUDE.md`) if nobody edited it. If someone did, it leaves that file alone and writes `CLAUDE.pixelforge-new.md` next to it to merge by hand.
+- Adds any missing standard pieces (folders, palette, size classes) without touching the game's own files.
+- Re-exports every sprite and rebuilds the gallery.
+- Records the version in `pixelforge.json`.
+
+`--dry-run` shows what would change. Re-run `pip install -e .` only if an update adds dependencies.
+To hold a game on a known version, check out a release tag in the tool repo, e.g. `git checkout v0.3.0`.
+
 This repo is also a demo project (the knight). Its `CLAUDE.md` covers working on the tool itself.

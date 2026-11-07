@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pixelforge"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Text-grid pixel art + animation toolkit for AI authoring, exporting to Phaser"
 requires-python = ">=3.10"
 dependencies = ["pillow>=10.1"]
 
 [project.scripts]
 pixelforge = "pixelforge.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "pixelforge.__version__"}
 
 [tool.setuptools]
 packages = ["pixelforge"]

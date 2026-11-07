@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import unittest
 
@@ -57,7 +59,8 @@ class BoxesTest(unittest.TestCase):
         with TempProject() as p:
             p.sprite("k", (4, 4), {"k": "#000000"}, {"a": "....\n.kk.\n.kk.\n.kk.\n"},
                      {"idle": {"frames": ["a"]}})
-            main(["--root", str(p.root), "resize", "k", "--class", "humanoid"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                main(["--root", str(p.root), "resize", "k", "--class", "humanoid"])
             s = Sprite.load("k")
             self.assertEqual((s.width, s.height, s.origin, s.body), (64, 48, (32, 48), (16, 30)))
             self.assertEqual(s.body_rect(), (24, 18, 16, 30))

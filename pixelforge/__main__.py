@@ -8,6 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from . import __version__
 from . import export as ex
 from . import model
 from . import render as rd
@@ -15,7 +16,8 @@ from .boxes import frame_boxes
 from .gallery import render_gallery
 from .grid import TRANSPARENT, Grid
 from .importer import import_png
-from .model import ASSETS, MARKER, Sprite, SpriteError, list_sprites, root, sprites_dir
+from .model import ASSETS, Sprite, SpriteError, list_sprites, root, sprites_dir
+from .project import init_project, upgrade_project
 from .validate import check
 
 _rel = model.rel
@@ -204,12 +206,20 @@ def cmd_export(args):
         for i in bad:
             print(i)
         sys.exit("export aborted: fix errors above (or pass --force)")
+    for line in _export(names, args.padding):
+        print(line)
+
+
+def _export(names: list[str], padding: int = 1) -> list[str]:
+    out = []
     for n in names:
-        png, js = ex.export_sprite(Sprite.load(n), padding=args.padding)
-        print(f"{_rel(png)}  {_rel(js)}")
+        png, js = ex.export_sprite(Sprite.load(n), padding=padding)
+        out.append(f"{_rel(png)}  {_rel(js)}")
+    ex.export_dir().mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS / "phaser" / "pixelforge.js", ex.export_dir() / "pixelforge.js")
     exported = sorted(p.stem for p in ex.export_dir().glob("*.json") if p.stem != "index")
-    print(_rel(ex.write_index(exported)))
+    out.append(_rel(ex.write_index(exported)))
+    return out
 
 
 def cmd_import(args):
@@ -350,35 +360,44 @@ def cmd_serve(args):
 def cmd_init(args):
     """Turn a folder (default: current) into a pixelforge art root for one game."""
     target = Path(args.dir).resolve()
-    target.mkdir(parents=True, exist_ok=True)
-    marker = target / MARKER
-    if marker.exists():
-        sys.exit(f"{marker} already exists; this folder is already a pixelforge project")
-    name = args.name or target.name
-    marker.write_text(json.dumps({"name": name, "classes": model.DEFAULT_CLASSES}, indent=2) + "\n",
-                      encoding="utf-8")
-    created = [MARKER]
-    for sub in ("sprites", "export"):
-        (target / sub).mkdir(exist_ok=True)
-    pal = target / "palettes" / "game.json"
-    if not pal.exists():
-        pal.parent.mkdir(exist_ok=True)
-        shutil.copyfile(ASSETS / "game.json", pal)
-        created.append("palettes/game.json")
-    guide = "CLAUDE.md" if not (target / "CLAUDE.md").exists() else "PIXELFORGE.md"
-    shutil.copyfile(ASSETS / "CLAUDE.md", target / guide)
-    created.append(guide)
-    gi = target / ".gitignore"
-    if "previews/" not in (gi.read_text(encoding="utf-8") if gi.exists() else ""):
-        with gi.open("a", encoding="utf-8") as f:
-            f.write("previews/\n")
-        created.append(".gitignore (previews/)")
-    print(f"initialised pixelforge project '{name}' in {target}")
-    for c in created:
-        print(f"  + {c}")
-    if guide == "PIXELFORGE.md":
-        print("  CLAUDE.md already existed: add a line to it such as `See PIXELFORGE.md for making sprites.`")
+    try:
+        report = init_project(target, args.name)
+    except FileExistsError as e:
+        sys.exit(str(e))
+    print(f"initialised pixelforge {__version__} project '{args.name or target.name}' in {target}")
+    for c in report.changes:
+        print(f"  {c}")
+    for n in report.notes:
+        print(f"  note: {n}")
     print("next: pixelforge new hero   (or ask Claude to draw a character)")
+
+
+def cmd_upgrade(args):
+    """Bring this game's folder up to the installed pixelforge (after `git pull` in the tool repo)."""
+    target = root()
+    try:
+        report, previous = upgrade_project(target, dry_run=args.dry_run)
+    except FileNotFoundError as e:
+        sys.exit(str(e))
+    print(f"pixelforge {previous or 'unknown'} -> {__version__} in {target}" + ("  (dry run)" if args.dry_run else ""))
+    for c in report.changes or ["(project files already current)"]:
+        print(f"  {c}")
+    if args.dry_run or args.no_export:
+        print("  sprites not re-exported" + (" (dry run)" if args.dry_run else ""))
+    elif names := list_sprites():
+        errors = [i for i in check(names) if i.level == "error"]
+        if errors:
+            print(f"  sprites NOT re-exported: `pixelforge check` reports {len(errors)} error(s); fix them, "
+                  f"then run `pixelforge export --all`")
+        else:
+            _export(names)
+            print(f"  ~ re-exported {len(names)} sprite(s) and export/pixelforge.js")
+            gallery = ex.export_dir() / "gallery.html"
+            if gallery.exists():
+                gallery.write_text(render_gallery(), encoding="utf-8")
+                print("  ~ rebuilt export/gallery.html")
+    for n in report.notes:
+        print(f"  note: {n}")
 
 
 def cmd_gallery(args):
@@ -392,12 +411,18 @@ def cmd_gallery(args):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="pixelforge", description="Text-grid pixel art + animation toolkit")
     p.add_argument("--root", help="project folder (default: nearest folder with pixelforge.json, else cwd)")
+    p.add_argument("--version", action="version", version=f"pixelforge {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     q = sub.add_parser("init", help="set up a game folder for pixelforge")
     q.add_argument("dir", nargs="?", default=".")
     q.add_argument("--name", help="game name shown in the gallery (default: folder name)")
     q.set_defaults(fn=cmd_init)
+
+    q = sub.add_parser("upgrade", help="update this game's guide/scaffolding to the installed pixelforge, re-export")
+    q.add_argument("--dry-run", action="store_true", help="show what would change, change nothing")
+    q.add_argument("--no-export", action="store_true", help="skip re-exporting sprites")
+    q.set_defaults(fn=cmd_upgrade)
 
     q = sub.add_parser("gallery", help="self-contained HTML page of every sprite + animation")
     q.add_argument("sprites", nargs="*")

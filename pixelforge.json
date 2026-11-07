@@ -1,3 +1,39 @@
 {
-  "name": "Pixelforge Demo"
+  "name": "Pixelforge Demo",
+  "pixelforge": {
+    "version": "0.3.0",
+    "guide": null
+  },
+  "classes": {
+    "small": {
+      "size": [
+        32,
+        32
+      ],
+      "body": [
+        16,
+        16
+      ]
+    },
+    "humanoid": {
+      "size": [
+        64,
+        48
+      ],
+      "body": [
+        16,
+        30
+      ]
+    },
+    "large": {
+      "size": [
+        96,
+        96
+      ],
+      "body": [
+        48,
+        64
+      ]
+    }
+  }
 }

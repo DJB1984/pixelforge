@@ -9,7 +9,16 @@ That copies the guide below into the game as its CLAUDE.md.
 `render.py` · `validate.py` · `export.py` · `importer.py` · `gallery.py` · `__main__.py` (CLI).
 `pixelforge/assets/` ships with the package: `viewer/`, `phaser/pixelforge.js`, `gallery.html` template,
 default `game.json` palette, and `CLAUDE.md` (the per-game guide; keep it in sync with CLI changes).
+`project.py` handles `init`/`upgrade`. The per-game guide is the only managed file: pixelforge.json
+records its name and sha256 so `upgrade` replaces it only when unedited. This repo sets `"guide": null`,
+because its CLAUDE.md is this file, not a copy of the guide.
 Tests: `python -m unittest discover -s tests -t tests`.
+
+## Releasing
+Every game shares the editable install, so a change reaches all of them on their next `git pull`.
+1. Tests pass. If the CLI or data format changed, update `pixelforge/assets/CLAUDE.md` in the same change.
+2. Bump `__version__` in `pixelforge/__init__.py` (pyproject reads it). Use minor for features, patch for fixes.
+3. Commit, then `git tag -a v<version> -m "..."` and push the tag. Games run `pixelforge upgrade` after pulling.
 
 ## Making art (applies to this repo's demo sprites too)
 @pixelforge/assets/CLAUDE.md
