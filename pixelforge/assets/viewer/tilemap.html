@@ -5,23 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pixelforge tilemap test</title>
 <style>
-  body { margin: 0; background: #1b1d23; color: #ddd; font: 14px system-ui, sans-serif; }
-  p { margin: 12px 16px; max-width: 900px; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin: 0 16px 10px; }
+  body { margin: 0; background: #141518; color: #a3a6ad; font: 13px Inter, system-ui, sans-serif; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px; }
   label { display: inline-flex; gap: 6px; align-items: center; }
-  #info { font: 13px ui-monospace, Consolas, monospace; color: #aaa; min-height: 1.4em; }
-  code { color: #fff; }
+  select { background: #1c1d21; color: #ededef; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 3px 6px; font: inherit; }
+  #info { font: 12px ui-monospace, Consolas, monospace; color: #82858d; min-height: 1.4em; }
+  .embed .ts { display: none; }
+  p { margin: 12px 16px; }
+  code { color: #ededef; }
 </style>
 </head>
 <body>
-<p>Each exported tileset's <code>sample</code> map (from its sprite.json), built with Phaser's real tilemap API through
-  <code>pixelforgeTilemap()</code>, which also plays animated tiles. Walk with the arrow keys or WASD: tiles with
-  <code>"collides": true</code> block you.
-  Hover a tile to see its index, name and properties.</p>
 <div class="bar">
-  <label>tileset <select id="tileset"></select></label>
-  <label>walker <select id="walker"></select></label>
-  <label><input type="checkbox" id="debug"> show colliding tiles</label>
+  <label class="ts">Tileset <select id="tileset"></select></label>
+  <label>Walker <select id="walker"></select></label>
+  <label><input type="checkbox" id="debug"> Show colliding tiles</label>
+  <span>Arrows or WASD to walk</span>
   <span id="info"></span>
 </div>
 <div id="game"></div>
@@ -30,10 +29,12 @@
 import { loadPixelforge, createPixelforgeAnims, loadPixelforgeTiles, pixelforgeTilemap, pixelforgeTileIndex,
          pixelforgeBody, playFacing } from '../phaser/pixelforge.js';
 
-const index = await (await fetch('../export/index.json', { cache: 'no-store' })).json();
+const BASE = '../live/';   // live builds from `pixelforge serve`: the working tree, not the last export
+const index = await (await fetch(`${BASE}index.json`, { cache: 'no-store' })).json();
 const tilesets = index.tilesets ?? [];
 const ZOOM = 3;
 const params = new URLSearchParams(location.search);
+if (params.has('embed')) document.body.classList.add('embed');
 const $ = (id) => document.getElementById(id);
 const fill = (sel, names, current) => {
   sel.innerHTML = names.map((n) => `<option ${n === current ? 'selected' : ''}>${n}</option>`).join('');
@@ -41,16 +42,15 @@ const fill = (sel, names, current) => {
 };
 
 if (!tilesets.length) {
-  document.body.insertAdjacentHTML('beforeend', '<p>No tilesets exported yet. Make one with ' +
-    '<code>pixelforge new terrain --tileset</code>, then <code>pixelforge export terrain</code>.</p>');
+  document.body.insertAdjacentHTML('beforeend', '<p>No tilesets yet. Make one with <code>pixelforge new terrain --tileset</code>.</p>');
 } else {
   const tsName = tilesets.includes(params.get('tileset')) ? params.get('tileset') : tilesets[0];
   fill($('tileset'), tilesets, tsName);
 
   class MapScene extends Phaser.Scene {
     preload() {
-      loadPixelforgeTiles(this, tsName, '../export/');
-      for (const name of index.sprites) loadPixelforge(this, name, '../export/');
+      loadPixelforgeTiles(this, tsName, BASE);
+      for (const name of index.sprites) loadPixelforge(this, name, BASE);
     }
     create() {
       // any top-down character (has walk_down) can walk the map
@@ -122,7 +122,7 @@ if (!tilesets.length) {
   }
 
   window.pixelforgeGame = new Phaser.Game({
-    type: Phaser.AUTO, parent: 'game', pixelArt: true, backgroundColor: '#2a2d36',
+    type: Phaser.AUTO, parent: 'game', pixelArt: true, backgroundColor: '#141518',
     width: 960, height: 576, physics: { default: 'arcade' }, scene: MapScene,
   });
 }

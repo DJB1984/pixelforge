@@ -9,6 +9,7 @@ sprites/<name>/sprite.json    size, origin, palette, animations
 sprites/<name>/frames/*.txt   one frame or layer per file: H lines of W chars
 export/<name>.png|.json       generated: Phaser load.aseprite format, or a Tiled tileset for tilesets (+ index.json, pixelforge.js)
 export/gallery.html           generated: shareable page of every sprite (`pixelforge gallery`)
+critiques.json                notes the developer left in the dashboard for you to fix (`pixelforge critiques`)
 previews/                     generated: renders, sheets, GIFs (gitignored)
 ```
 - **Grid chars** are palette keys. `.` = transparent. Use mnemonic keys (`k` outline, `s`/`S` skin light/shadow, `m`/`d` mid/dark metal...). A palette value is `#rrggbb[aa]` or a name from `game.json`.
@@ -119,7 +120,8 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `gallery` | `export/gallery.html`: one self-contained page with every character playing every animation |
 | `upgrade [--dry-run]` | after the pixelforge repo is updated (`git pull`): refresh this guide, add missing scaffolding, re-export. If it writes `CLAUDE.pixelforge-new.md`, merge that into CLAUDE.md and delete it |
 | `--version` | installed pixelforge version (`pixelforge.json` records the version this game was last upgraded to) |
-| `serve [--port 8000]` | then open `http://127.0.0.1:8000/`: browse every character → animation → frame, with boxes. `/viewer/phaser.html` is the real Phaser test, and `/viewer/tilemap.html` lets a top-down character walk each tileset's sample map |
+| `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every sprite and tileset, built live from `sprites/` (no export needed), where the developer critiques the art. Each asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/tilemap.html` walkable sample map) |
+| `critiques [--all]` / `critiques watch [--once]` / `critiques show ID` / `critiques done ID -m "..."` | the developer's critiques: list them, wait for new ones, picture one (`previews/critique_ID.png`), mark one fixed |
 
 ## The authoring loop (do this every time)
 1. Plan the sprite: silhouette, palette ramps (3–4 shades per material), which parts are reusable layers (body / legs / weapon / effects).
@@ -129,7 +131,15 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 5. `context S ANIM` once the sprite has shape: it has to read on the game's real ground, and still read in **grayscale**. Fix any blend-map hot spots that matter (feet, weapon, head) with value, not hue: a darker outline, or a lighter rim on the edge facing the light.
 6. For animations: `sheet S ANIM --onion`, and `render ... --onion` for single frames (red ghost = previous frame, blue = next). Check that motion is continuous and that the feet stay planted. Then `motion S ANIM` and **Read its chart**: you can't watch a GIF, so judge timing from the numbers. Even steps (or deliberate easing), a held wind-up, a fast smear and a 1px idle bob are what to look for. Act on its notes or know why you're ignoring them.
 7. After editing an existing sprite, `compare S`: every frame you changed is listed, so a shared layer edit can't quietly break another animation. Read the comparison PNG for the frames you didn't mean to touch.
-8. `export S`, then `gallery` so the team's catalog stays current. Optionally `serve` and check `/viewer/phaser.html` in the browser.
+8. `export S`, then `gallery` so the team's catalog stays current. The developer reviews the result in `serve`'s dashboard.
+
+## Critiques from the dashboard
+The developer reviews the art in `serve`'s dashboard and leaves critiques on a whole sprite or tileset, an animation, a frame or tile, or a spot they marked on it. A spot is `[x, y, w, h]` in frame pixels: the same coordinates as `show` and the boxes.
+- When the developer asks you to watch for critiques, run `pixelforge critiques watch --once` in the background. It returns as soon as there are critiques, prints one line each, and marks them `working` so the dashboard shows you're on it. (With the Monitor tool, `pixelforge critiques watch` streams one line per new critique instead.)
+- For each critique: `pixelforge critiques show ID`, then Read the PNG it prints (the spot is outlined in cyan) and fix the art with the normal authoring loop (check, render, look). Then run `pixelforge critiques done ID -m "what you changed"`. That marks it fixed, shows your note in the dashboard, and re-exports the sprite. Keep the note to one plain sentence about the change.
+- Then start `watch --once` again, so you keep watching until the developer says stop.
+- If you're asked to "fix the open critiques" without watching, `pixelforge critiques` lists them with the frame entry or tile each one points at.
+- The dashboard updates by itself when frame files change, so the developer sees your fix land without reloading.
 
 ## Pixel-art rules
 - Readable silhouette at 1x first, details second. Chunky proportions (big head/helmet) read best at 32px.
@@ -166,7 +176,7 @@ update()  { debug.clear(); drawPixelforgeBoxes(debug, [knight, ...enemies]); }  
 - Face left with `sprite.setFlipX(true)`. Boxes mirror with it.
 - Top-down: `playFacing(sprite, 'walk', 'left' | 'right' | 'up' | 'down')` picks `<sprite>_walk_<down|up|side>` and sets the flip.
 - Movement and walls use the fixed physics body. Hurtboxes and hitboxes only decide who hits whom, so changing per-frame boxes never makes the character jitter.
-- `/viewer/phaser.html` (via `serve`) runs every attack against sparring dummies (front, far, behind) with boxes drawn: use it to check reach.
+- `/viewer/phaser.html` (via `serve`, or a sprite's "In game" tab) runs every attack against sparring dummies (front, far, behind) with boxes drawn: use it to check reach.
 
 Tilesets:
 ```js

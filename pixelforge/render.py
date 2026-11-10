@@ -22,6 +22,7 @@ ONION_NEXT = (60, 120, 230)
 BODY_COLOR = (250, 200, 40, 255)    # body box (physics)
 HURT_COLOR = (40, 200, 90, 255)     # hurtbox
 HIT_COLOR = (240, 40, 60, 255)      # hitbox
+MARK_COLOR = (44, 232, 245, 255)    # critiqued spot
 
 
 def font(size: int) -> ImageFont.ImageFont:
@@ -64,9 +65,10 @@ def zoom(img: Image.Image, scale: int) -> Image.Image:
 def preview(sprite: Sprite, grid: Grid, scale: int = 16, title: str = "",
             prev: Grid | None = None, nxt: Grid | None = None,
             gridlines: bool = True, rulers: bool = True, show_origin: bool = True,
-            boxes: dict | None = None) -> Image.Image:
+            boxes: dict | None = None, marks: list | None = None) -> Image.Image:
     """Zoomed frame with pixel grid, x/y rulers, origin marker, optional onion skins,
-    optional body box / hurtbox / hitbox outlines, and real-size (1x, 2x) thumbnails."""
+    optional body box / hurtbox / hitbox outlines, optional [x, y, w, h] marks (e.g. a critiqued spot),
+    and real-size (1x, 2x) thumbnails."""
     w, h = grid.width * scale, grid.height * scale
     ruler = 22 if rulers else 0
     title_h = 22 if title else 0
@@ -95,6 +97,10 @@ def preview(sprite: Sprite, grid: Grid, scale: int = 16, title: str = "",
         d.line([(cx, cy - r * 2), (cx, cy + r * 2)], fill=ORIGIN_COLOR, width=2)
     if boxes is not None:
         draw_boxes(d, sprite, boxes, scale)
+    for x, y, mw, mh in marks or []:
+        x0, y0, x1, y1 = x * scale, y * scale, (x + mw) * scale - 1, (y + mh) * scale - 1
+        d.rectangle([x0 - 1, y0 - 1, x1 + 1, y1 + 1], outline=(0, 0, 0, 255))
+        d.rectangle([x0, y0, x1, y1], outline=MARK_COLOR, width=max(1, scale // 6))
 
     canvas.alpha_composite(art, (ruler, title_h + ruler))
     cd = ImageDraw.Draw(canvas)

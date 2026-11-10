@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import http.server
 import json
 import shutil
 import sys
@@ -10,6 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from . import compare as cmp
+from . import critiques as cq
 from . import context as cx
 from . import export as ex
 from . import model
@@ -21,6 +21,7 @@ from .grid import TRANSPARENT, Grid
 from .importer import import_png
 from .model import ASSETS, Sprite, SpriteError, list_sprites, root, sprites_dir
 from .project import init_project, upgrade_project
+from .server import serve
 from .validate import check
 
 _rel = model.rel
@@ -444,39 +445,59 @@ def cmd_paint(args):
     print(_rel(s.frame_path(args.frame)))
 
 
-class _Handler(http.server.SimpleHTTPRequestHandler):
-    """Serves /viewer/ and /phaser/ from the installed package, everything else from the project.
-    / redirects to the sprite browser."""
-
-    def do_GET(self):
-        if self.path.split("?", 1)[0] in ("/", "/index.html"):
-            self.send_response(302)
-            self.send_header("Location", "/viewer/")
-            self.end_headers()
-            return
-        super().do_GET()
-
-    def translate_path(self, path):
-        parts = path.split("?", 1)[0].split("#", 1)[0].lstrip("/").split("/")
-        if parts and parts[0] in ("viewer", "phaser"):
-            return str(ASSETS.joinpath(*parts))
-        return super().translate_path(path)
-
-    def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
-        super().end_headers()
-
-
 def cmd_serve(args):
-    handler = lambda *a, **kw: _Handler(*a, directory=str(root()), **kw)  # noqa: E731
-    with http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler) as httpd:
-        print(f"serving {root()}")
-        print(f"  sprites: http://127.0.0.1:{args.port}/   (every character, animation and frame)")
-        print(f"  phaser:  http://127.0.0.1:{args.port}/viewer/phaser.html")
-        print(f"  tiles:   http://127.0.0.1:{args.port}/viewer/tilemap.html  (tilesets' sample maps, walkable)")
-        print(f"  gallery: http://127.0.0.1:{args.port}/export/gallery.html  (after `pixelforge gallery`)")
-        print("Ctrl+C to stop")
-        httpd.serve_forever()
+    serve(args.port)
+
+
+def cmd_critiques(args):
+    """Critiques left in the dashboard (`serve`). Default: list the ones still to fix."""
+    if args.action == "watch":
+        try:
+            cq.watch(once=args.once, emit=lambda line: print(line, flush=True))
+        except KeyboardInterrupt:
+            pass
+        return
+    if args.action in ("show", "done", "reopen", "delete"):
+        if args.id is None:
+            sys.exit(f"usage: pixelforge critiques {args.action} ID")
+        c = cq.get(args.id)
+        if args.action == "show":
+            print(cq.summary_line(c))
+            for line in cq.details(c["target"]):
+                print(f"  {line}")
+            print(f"  {_rel(cq.render_target(c))}")
+            return
+        if args.action == "delete":
+            cq.delete(c["id"])
+            print(f"deleted #{c['id']}")
+            return
+        if args.action == "reopen":
+            cq.update(c["id"], status="open")
+            print(f"reopened #{c['id']}")
+            return
+        cq.update(c["id"], status="fixed", note=args.message)
+        print(f"fixed #{c['id']}: {cq.label(c['target'])}")
+        name = c["target"]["asset"]
+        bad = [i for i in check([name]) if i.level == "error"]
+        if bad:
+            for i in bad:
+                print(f"  {i}")
+            print(f"  not exported: fix the errors above, then `pixelforge export {name}`")
+        else:
+            for line in _export([name]):
+                print(f"  {line}")
+        return
+    shown = [c for c in cq.all_critiques() if args.all or c["status"] != "fixed"]
+    if not shown:
+        print("no open critiques" if not args.all else "no critiques")
+        return
+    for c in shown:
+        print(f"#{c['id']:<3} {c['status']:7} {cq.label(c['target'])}")
+        print(f"     {c['text']}")
+        for line in cq.details(c["target"]):
+            print(f"     {line}")
+        if c.get("note"):
+            print(f"     fixed: {c['note']}")
 
 
 def cmd_init(args):
@@ -666,9 +687,18 @@ def main(argv=None):
     q.add_argument("ops", nargs="+")
     q.set_defaults(fn=cmd_paint)
 
-    q = sub.add_parser("serve", help="serve the project for viewer/index.html")
+    q = sub.add_parser("serve", help="the dashboard: every sprite and tileset, live, with critiques")
     q.add_argument("--port", type=int, default=8000)
     q.set_defaults(fn=cmd_serve)
+
+    q = sub.add_parser("critiques", help="critiques left in the dashboard: list, watch, show, done",
+                       description=cmd_critiques.__doc__)
+    q.add_argument("action", nargs="?", default="list", choices=["list", "watch", "show", "done", "reopen", "delete"])
+    q.add_argument("id", nargs="?", type=int)
+    q.add_argument("--all", action="store_true", help="list: include fixed ones")
+    q.add_argument("--once", action="store_true", help="watch: return as soon as critiques are handed over")
+    q.add_argument("-m", "--message", help="done: what you changed (shown in the dashboard)")
+    q.set_defaults(fn=cmd_critiques)
 
     args = p.parse_args(argv)
     if args.root:

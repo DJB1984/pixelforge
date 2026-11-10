@@ -19,9 +19,15 @@ Then ask Claude, e.g. *"make a 32x32 slime enemy with idle, hop and hurt animati
 ```
 pixelforge export --all      # export/<name>.png + .json + pixelforge.js (for Phaser; tilesets export as Tiled tilesets)
 pixelforge gallery           # export/gallery.html: one file, every character and tileset, send it to anyone
-pixelforge serve             # http://127.0.0.1:8000/ (browse characters, animations, frames), /viewer/phaser.html,
-                             # and /viewer/tilemap.html (walk a character around each tileset's sample map)
+pixelforge serve             # the dashboard: http://127.0.0.1:8000/
 ```
+
+## Reviewing art
+`pixelforge serve` opens a dashboard of every sprite and tileset in the game, built live from the text grids, so you see
+Claude's edits as they land. Mark what's wrong (drag on the art to mark a spot, or pick a frame, animation, tile or the
+whole asset), type a critique, and send it. In Claude Code, say *"watch for pixelforge critiques and fix them"* (the
+dashboard's **Copy prompt** link copies that). Claude picks each critique up, fixes the art and leaves a note on it, and the
+dashboard shows the critique as fixed. Critiques are kept in `critiques.json` at the art root.
 
 ## Updating
 ```

@@ -7,6 +7,9 @@ That copies the guide below into the game as its CLAUDE.md.
 ## Developing the tool
 `pixelforge/grid.py` (Grid ops) · `model.py` (project root discovery, sprite.json loading, frame resolution) ·
 `render.py` · `validate.py` · `export.py` · `importer.py` · `gallery.py` · `__main__.py` (CLI).
+Dashboard: `server.py` (`serve`: live builds from sprites/, `/api/project`, `/api/state`, critique API) ·
+`critiques.py` (critiques.json store, targets, `watch` hand-off to Claude, `show` pictures) ·
+`assets/viewer/index.html` + `app.js` + `app.css` (no build step). Its product brief is PRODUCT.md, its look DESIGN.md.
 Inspection for an AI that sees stills, not motion: `motion.py` (per-frame measurements, spacing/timing notes,
 timeline chart) · `compare.py` (git ref vs working tree, pixel diff) · `context.py` (on real ground, grayscale, edge contrast).
 `pixelforge/assets/` ships with the package: `viewer/`, `phaser/pixelforge.js`, `gallery.html` template,
