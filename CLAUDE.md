@@ -7,6 +7,8 @@ That copies the guide below into the game as its CLAUDE.md.
 ## Developing the tool
 `pixelforge/grid.py` (Grid ops) · `model.py` (project root discovery, sprite.json loading, frame resolution) ·
 `render.py` · `validate.py` · `export.py` · `importer.py` · `gallery.py` · `__main__.py` (CLI).
+Inspection for an AI that sees stills, not motion: `motion.py` (per-frame measurements, spacing/timing notes,
+timeline chart) · `compare.py` (git ref vs working tree, pixel diff) · `context.py` (on real ground, grayscale, edge contrast).
 `pixelforge/assets/` ships with the package: `viewer/`, `phaser/pixelforge.js`, `gallery.html` template,
 default `game.json` palette, and `CLAUDE.md` (the per-game guide; keep it in sync with CLI changes).
 `project.py` handles `init`/`upgrade`. The per-game guide is the only managed file: pixelforge.json

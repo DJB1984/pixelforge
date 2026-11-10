@@ -106,6 +106,9 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `show S ANIM I` / `show S @frame` / `show S TILE` | print a frame (or a tileset's tile) with x/y rulers (find exact coordinates) |
 | `render S ANIM I [--onion] [--scale N] [--no-boxes]` | zoomed PNG with grid, rulers, origin mark, boxes, 1x/2x thumbs → `previews/` |
 | `sheet S [ANIM...] [--onion] [--boxes]` | all frames side by side + 1x strip: judge motion and consistency (active frames labelled) |
+| `motion S [ANIM...]` | timing you can't see in stills: per-frame table (head, feet, body centre, weapon tip and reach, pixels changed, ms), notes on uneven spacing / unheld wind-up / slow smear / bob size, and a timeline chart PNG |
+| `compare S [ANIM I \| @frame \| TILE] [--ref HEAD]` | before (as committed in git) / after / changed pixels. With no target: every frame, so you see everything a layer edit touched |
+| `context S ANIM [I] [--on terrain:grass --on '#262b44']` | the sprite on real ground at game zoom (3x), in grayscale, and a map of silhouette edges that blend into the ground, with contrast numbers |
 | `gif S [ANIM]` | animated GIF at real timing (for the user). For a tileset: the sample map, or `gif S TILE` for one tile repeated 3×3 |
 | `check [S] [-v]` | lint: sizes, undefined keys, missing frames, floating pixels, feet jitter, jump cuts, palette size |
 | `paint S FRAME "ops"` | edit a frame file: `px x y k [x y k...]; frect x0 y0 x1 y1 k; box ...; line x0 y0 x1 y1 k; fill x y k; move x0 y0 x1 y1 dx dy; shift dx dy; mirror lr\|rl; swap a b; clear` (`.` erases) |
@@ -123,8 +126,10 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 2. Write or Edit the `.txt` grids. Edit individual rows rather than rewriting files. `paint` is good for lines, fills and moves.
 3. `check S`. Fix every error and think about each warning.
 4. `render` the frame and **Read the PNG**. Critique it honestly: silhouette at 1x, readability, stray pixels, shading direction. Fix and repeat.
-5. For animations: `sheet S ANIM --onion`, and `render ... --onion` for single frames (red ghost = previous frame, blue = next). Check that motion is continuous and that the feet stay planted.
-6. `export S`, then `gallery` so the team's catalog stays current. Optionally `serve` and check `/viewer/phaser.html` in the browser.
+5. `context S ANIM` once the sprite has shape: it has to read on the game's real ground, and still read in **grayscale**. Fix any blend-map hot spots that matter (feet, weapon, head) with value, not hue: a darker outline, or a lighter rim on the edge facing the light.
+6. For animations: `sheet S ANIM --onion`, and `render ... --onion` for single frames (red ghost = previous frame, blue = next). Check that motion is continuous and that the feet stay planted. Then `motion S ANIM` and **Read its chart**: you can't watch a GIF, so judge timing from the numbers. Even steps (or deliberate easing), a held wind-up, a fast smear and a 1px idle bob are what to look for. Act on its notes or know why you're ignoring them.
+7. After editing an existing sprite, `compare S`: every frame you changed is listed, so a shared layer edit can't quietly break another animation. Read the comparison PNG for the frames you didn't mean to touch.
+8. `export S`, then `gallery` so the team's catalog stays current. Optionally `serve` and check `/viewer/phaser.html` in the browser.
 
 ## Pixel-art rules
 - Readable silhouette at 1x first, details second. Chunky proportions (big head/helmet) read best at 32px.

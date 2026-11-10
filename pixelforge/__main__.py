@@ -9,8 +9,11 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import compare as cmp
+from . import context as cx
 from . import export as ex
 from . import model
+from . import motion
 from . import render as rd
 from .boxes import frame_boxes
 from .gallery import render_gallery
@@ -195,6 +198,75 @@ def cmd_sheet(args):
     img = rd.sheet(s, anims, scale=args.scale, onion=args.onion, boxes=args.boxes)
     suffix = ("_" + "_".join(args.anims) if args.anims else "") + ("_onion" if args.onion else "")
     out = _previews() / f"{s.name}_sheet{suffix}.png"
+    img.save(out)
+    print(_rel(out))
+
+
+def cmd_motion(args):
+    s = Sprite.load(args.sprite)
+    if s.kind == "tileset":
+        sys.exit(f"{s.name} is a tileset; `tiles {s.name}` shows its animated tiles frame by frame")
+    for a in args.anims or list(s.animations):
+        fm = motion.measure(s, a)
+        print(motion.table(s, a, fm))
+        for n in motion.notes(s, a, fm):
+            print(f"  - {n}")
+        out = _previews() / f"{s.name}_{a}_motion.png"
+        motion.chart(s, a, fm).save(out)
+        print(_rel(out) + "\n")
+
+
+def cmd_compare(args):
+    s = Sprite.load(args.sprite)
+    with cmp.sprite_at(s.name, args.ref) as before:
+        if args.target is None:
+            lines, img = cmp.compare_all(before, s, args.scale, args.ref)
+            print(f"{s.name}: working tree vs {args.ref}")
+            for line in lines:
+                print(f"  {line}")
+            if img is not None:
+                out = _previews() / f"{s.name}_compare.png"
+                img.save(out)
+                print(_rel(out))
+            return
+        if before is None:
+            sys.exit(f"{s.name} is not in {args.ref}: nothing to compare against")
+        if args.target.startswith("@"):
+            fid, label = args.target[1:], args.target
+            b = rd.to_image(before, before.load_frame(fid, strict=False)) if before.frame_path(fid).is_file() else None
+            a = rd.to_image(s, s.load_frame(fid, strict=False))
+        elif s.kind == "tileset":
+            label = args.target
+            b = rd.to_image(before, before.tile(label)) if label in before.tile_names() else None
+            a = rd.to_image(s, s.tile(label))
+        else:
+            i = int(args.index)
+            label = f"{args.target}[{i}]"
+            a = rd.to_image(s, s.frame(args.target, i))
+            ba = before.animations.get(args.target)
+            b = rd.to_image(before, before.frame(args.target, i)) if ba and -len(ba.frames) <= i < len(ba.frames) else None
+        if b is None:
+            print(f"{label} is new since {args.ref}")
+        b, a = cmp.align(b, before.origin, a, s.origin)
+        img, d = cmp.triptych(b, a, args.scale, f"{s.name} {label}", args.ref)
+        print(f"{s.name} {label} vs {args.ref}: {d.summary()}")
+        out = _previews() / f"{s.name}_{label.strip('@').replace('[', '_').rstrip(']')}_compare.png"
+        img.save(out)
+        print(_rel(out))
+
+
+def cmd_context(args):
+    s = Sprite.load(args.sprite)
+    if s.kind == "tileset":
+        sys.exit(f"{s.name} is a tileset; use `context <sprite> <anim> --on {s.name}:<tile>`")
+    a = s.anim(args.anim)
+    idx = [int(args.index) % len(a.frames)] if args.index is not None else range(len(a.frames))
+    frames = [(f"{args.anim}[{i}]", s.frame(args.anim, i)) for i in idx]
+    grounds = [cx.ground(o, s.width, s.height) for o in args.on] if args.on else cx.default_grounds(s.width, s.height)
+    img, report = cx.context_sheet(s, frames, grounds, scale=args.scale)
+    for line in report:
+        print(line)
+    out = _previews() / f"{s.name}_{args.anim}{'_' + str(idx[0]) if args.index is not None else ''}_context.png"
     img.save(out)
     print(_rel(out))
 
@@ -517,6 +589,28 @@ def main(argv=None):
     q.add_argument("--onion", action="store_true")
     q.add_argument("--boxes", action="store_true", help="outline body box, hurtboxes, hitboxes")
     q.set_defaults(fn=cmd_sheet)
+
+    q = sub.add_parser("motion", help="per-frame positions + timing table, spacing notes and a timeline chart")
+    q.add_argument("sprite")
+    q.add_argument("anims", nargs="*", help="default: every animation")
+    q.set_defaults(fn=cmd_motion)
+
+    q = sub.add_parser("compare", help="before (git) / after / changed pixels, for a frame or the whole sprite")
+    q.add_argument("sprite")
+    q.add_argument("target", nargs="?", help="animation, @frame_id or tile name (default: every frame)")
+    q.add_argument("index", nargs="?", default="0")
+    q.add_argument("--ref", default="HEAD", help="git commit to compare against (default HEAD)")
+    q.add_argument("--scale", type=int, default=8)
+    q.set_defaults(fn=cmd_compare)
+
+    q = sub.add_parser("context", help="sprite on real ground tiles at game zoom, grayscale, contrast check")
+    q.add_argument("sprite")
+    q.add_argument("anim")
+    q.add_argument("index", nargs="?", help="one frame (default: every frame)")
+    q.add_argument("--on", action="append", metavar="GROUND",
+                   help="tileset, tileset:tile or #rrggbb; repeatable (default: each tileset's first tile)")
+    q.add_argument("--scale", type=int, default=3, help="game zoom (default 3)")
+    q.set_defaults(fn=cmd_context)
 
     q = sub.add_parser("resize", help="re-canvas a sprite, keeping it on its origin")
     q.add_argument("sprite")
