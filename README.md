@@ -14,12 +14,13 @@ Editable install: changes to this repo apply to every game straight away.
 cd my-game/art
 pixelforge init --name "My Game"     # pixelforge.json, sprites/, palettes/, CLAUDE.md
 ```
-Then ask Claude, e.g. *"make a 32x32 slime enemy with idle, hop and hurt animations"*. The CLAUDE.md that `init` wrote tells it the format, the render → look → fix loop and the pixel-art rules.
+Then ask Claude, e.g. *"make a 32x32 slime enemy with idle, hop and hurt animations"* or *"make a 16x16 dungeon tileset: floor, cracked floor, walls, a door"*. The CLAUDE.md that `init` wrote tells it the format, the render → look → fix loop and the pixel-art rules.
 
 ```
-pixelforge export --all      # export/<name>.png + .json + pixelforge.js (for Phaser)
-pixelforge gallery           # export/gallery.html: one file, every character, send it to anyone
-pixelforge serve             # http://127.0.0.1:8000/viewer/ (frame player) and /viewer/phaser.html
+pixelforge export --all      # export/<name>.png + .json + pixelforge.js (for Phaser; tilesets export as Tiled tilesets)
+pixelforge gallery           # export/gallery.html: one file, every character and tileset, send it to anyone
+pixelforge serve             # http://127.0.0.1:8000/ (browse characters, animations, frames), /viewer/phaser.html,
+                             # and /viewer/tilemap.html (walk a character around each tileset's sample map)
 ```
 
 ## Updating

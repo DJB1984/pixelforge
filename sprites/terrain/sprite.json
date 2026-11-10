@@ -1,0 +1,68 @@
+{
+  "name": "terrain",
+  "type": "tileset",
+  "size": [16, 16],
+  "columns": 8,
+  "palette": {
+    "g": "green",
+    "G": "forest",
+    "D": "dark_green",
+    "y": "yellow",
+    "w": "white",
+    "r": "red",
+    "t": "tan",
+    "n": "brown",
+    "b": "dark_brown",
+    "u": "blue",
+    "N": "navy",
+    "c": "cyan",
+    "h": "light_gray",
+    "l": "gray",
+    "m": "slate",
+    "d": "dark_slate"
+  },
+  "tiles": [
+    "grass",
+    {"name": "grass_tuft", "from": "grass", "layers": ["tuft"]},
+    {"name": "flowers", "from": "grass", "layers": ["flowers"]},
+    "dirt",
+    {"name": "dirt_n", "from": "dirt", "layers": ["edge_n"]},
+    {"name": "dirt_s", "from": "dirt", "layers": ["edge_s"]},
+    {"name": "water", "fps": 4, "frames": [
+      {"from": "water", "layers": ["deep", "waves"]},
+      {"from": "water", "layers": [{"from": "deep", "roll": [1, 0]}, "waves_b"]},
+      {"from": "water", "layers": [{"from": "deep", "roll": [1, 0]}, {"from": "waves", "roll": [1, 0]}]},
+      {"from": "water", "layers": ["deep", {"from": "waves_b", "roll": [1, 0]}]}
+    ]},
+    {"name": "water_n", "frames": "water", "layers": ["bank_n"]},
+    {"name": "water_s", "frames": "water", "layers": ["bank_s"]},
+    "bridge",
+    "wall"
+  ],
+  "properties": {
+    "water*": {"collides": true, "liquid": true},
+    "wall": {"collides": true}
+  },
+  "sample": {
+    "legend": {
+      "g": "grass", "t": "grass_tuft", "f": "flowers",
+      "d": "dirt", "n": "dirt_n", "s": "dirt_s",
+      "w": "water", "~": "water_n", "_": "water_s",
+      "=": "bridge", "#": "wall"
+    },
+    "rows": [
+      "####################",
+      "gggtgggggfggggggtggg",
+      "ggfgggggggggggfggggg",
+      "nnnnnnnnnnnnnnnnnnnn",
+      "dddddddddddddddddddd",
+      "ssssssssssssssssssss",
+      "gggggtgggggggfgggggg",
+      "~~~~~~~~~=~~~~~~~~~~",
+      "wwwwwwwww=wwwwwwwwww",
+      "_________=__________",
+      "ggfggggggggggtgggfgg",
+      "####################"
+    ]
+  }
+}

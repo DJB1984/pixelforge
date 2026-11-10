@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pixelforge tilemap test</title>
+<style>
+  body { margin: 0; background: #1b1d23; color: #ddd; font: 14px system-ui, sans-serif; }
+  p { margin: 12px 16px; max-width: 900px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin: 0 16px 10px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  #info { font: 13px ui-monospace, Consolas, monospace; color: #aaa; min-height: 1.4em; }
+  code { color: #fff; }
+</style>
+</head>
+<body>
+<p>Each exported tileset's <code>sample</code> map (from its sprite.json), built with Phaser's real tilemap API through
+  <code>pixelforgeTilemap()</code>, which also plays animated tiles. Walk with the arrow keys or WASD: tiles with
+  <code>"collides": true</code> block you.
+  Hover a tile to see its index, name and properties.</p>
+<div class="bar">
+  <label>tileset <select id="tileset"></select></label>
+  <label>walker <select id="walker"></select></label>
+  <label><input type="checkbox" id="debug"> show colliding tiles</label>
+  <span id="info"></span>
+</div>
+<div id="game"></div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script type="module">
+import { loadPixelforge, createPixelforgeAnims, loadPixelforgeTiles, pixelforgeTilemap, pixelforgeTileIndex,
+         pixelforgeBody, playFacing } from '../phaser/pixelforge.js';
+
+const index = await (await fetch('../export/index.json', { cache: 'no-store' })).json();
+const tilesets = index.tilesets ?? [];
+const ZOOM = 3;
+const params = new URLSearchParams(location.search);
+const $ = (id) => document.getElementById(id);
+const fill = (sel, names, current) => {
+  sel.innerHTML = names.map((n) => `<option ${n === current ? 'selected' : ''}>${n}</option>`).join('');
+  sel.onchange = () => { params.set(sel.id, sel.value); location.search = params; };
+};
+
+if (!tilesets.length) {
+  document.body.insertAdjacentHTML('beforeend', '<p>No tilesets exported yet. Make one with ' +
+    '<code>pixelforge new terrain --tileset</code>, then <code>pixelforge export terrain</code>.</p>');
+} else {
+  const tsName = tilesets.includes(params.get('tileset')) ? params.get('tileset') : tilesets[0];
+  fill($('tileset'), tilesets, tsName);
+
+  class MapScene extends Phaser.Scene {
+    preload() {
+      loadPixelforgeTiles(this, tsName, '../export/');
+      for (const name of index.sprites) loadPixelforge(this, name, '../export/');
+    }
+    create() {
+      // any top-down character (has walk_down) can walk the map
+      const walkers = index.sprites.filter((n) => this.cache.json.get(n).meta.frameTags.some((t) => t.name === `${n}_walk_down`));
+      const heroName = walkers.includes(params.get('walker')) ? params.get('walker') : walkers[0];
+      fill($('walker'), walkers, heroName);
+
+      const { map, layer } = pixelforgeTilemap(this, tsName);
+      window.pixelforgeMap = { tiles: map.width * map.height, width: map.width, height: map.height };
+      this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+      this.cameras.main.setZoom(ZOOM).setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+      this.debug = this.add.graphics().setDepth(1e6);
+      this.layer = layer;
+      this.marker = this.add.graphics().setDepth(1e6);
+
+      if (heroName) {
+        createPixelforgeAnims(this, heroName);
+        // start on the walkable tile nearest the middle of the map
+        const cx = map.width / 2, cy = map.height / 2;
+        const spots = [];
+        layer.forEachTile((t) => { if (t.index >= 0 && !t.collides) spots.push(t); });
+        spots.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+        const start = spots[0] ?? { pixelX: 0, pixelY: 0 };
+        this.hero = this.physics.add.sprite(start.pixelX + map.tileWidth / 2, start.pixelY + map.tileHeight - 2, heroName);
+        // Top-down: collide with the feet only, so the head can overlap a wall's top edge.
+        const b = pixelforgeBody(this, heroName);
+        this.hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8);
+        this.hero.setCollideWorldBounds(true);
+        this.physics.add.collider(this.hero, layer);
+        this.cameras.main.startFollow(this.hero, true);
+        this.facing = 'down';
+        playFacing(this.hero, 'idle', 'down');
+        window.pixelforgeHero = this.hero;
+      }
+      this.keys = this.input.keyboard.addKeys('UP,DOWN,LEFT,RIGHT,W,A,S,D');
+      $('debug').onchange = () => this.drawDebug();
+      this.drawDebug();
+      const w = Math.min(window.innerWidth, map.widthInPixels * ZOOM), h = Math.min(window.innerHeight - 120, map.heightInPixels * ZOOM);
+      this.scale.resize(w, Math.max(h, 240));
+    }
+    drawDebug() {
+      this.debug.clear();
+      if ($('debug').checked) {
+        this.layer.renderDebug(this.debug, { tileColor: null, collidingTileColor: new Phaser.Display.Color(240, 40, 60, 110) });
+        if (this.hero) this.debug.lineStyle(1, 0xfac828, 1).strokeRectShape(this.hero.body);
+      }
+    }
+    update() {
+      const p = this.input.activePointer.positionToCamera(this.cameras.main);
+      const t = this.layer.getTileAtWorldXY(p.x, p.y);
+      this.marker.clear();
+      if (t && t.index >= 0) {
+        this.marker.lineStyle(1, 0xffffff, 0.8).strokeRect(t.pixelX, t.pixelY, t.width, t.height);
+        const { name, ...props } = t.properties;   // animated tiles change index; the name doesn't
+        const anim = t.index !== pixelforgeTileIndex(this, tsName, name) ? `  (showing frame slot ${t.index})` : '';
+        $('info').textContent = `tile ${pixelforgeTileIndex(this, tsName, name)} ${name} at (${t.x}, ${t.y})${anim}` +
+          (Object.keys(props).length ? '  ' + Object.entries(props).map(([k, v]) => `${k}=${v}`).join(' ') : '');
+      }
+      if (!this.hero) return;
+      const k = this.keys, speed = 70;
+      const vx = (k.RIGHT.isDown || k.D.isDown) - (k.LEFT.isDown || k.A.isDown);
+      const vy = (k.DOWN.isDown || k.S.isDown) - (k.UP.isDown || k.W.isDown);
+      this.hero.setVelocity(vx * speed, vy * speed);
+      if (vx || vy) this.facing = vx ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
+      playFacing(this.hero, vx || vy ? 'walk' : 'idle', this.facing);
+      this.hero.setDepth(this.hero.y);
+      if ($('debug').checked) this.drawDebug();
+    }
+  }
+
+  window.pixelforgeGame = new Phaser.Game({
+    type: Phaser.AUTO, parent: 'game', pixelArt: true, backgroundColor: '#2a2d36',
+    width: 960, height: 576, physics: { default: 'arcade' }, scene: MapScene,
+  });
+}
+</script>
+</body>
+</html>

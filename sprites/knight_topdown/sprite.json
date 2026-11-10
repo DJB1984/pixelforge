@@ -1,0 +1,578 @@
+{
+  "name": "knight_topdown",
+  "class": "topdown",
+  "palette": {
+    "k": "outline",
+    "d": "dark_slate",
+    "m": "slate",
+    "l": "gray",
+    "h": "light_gray",
+    "w": "white",
+    "r": "crimson",
+    "R": "red",
+    "s": "skin",
+    "S": "skin_shadow",
+    "b": "dark_brown",
+    "n": "brown",
+    "y": "amber",
+    "B": "deep_brown",
+    "c": "plum"
+  },
+  "roles": {
+    "*smear_trail": "none",
+    "*sword*": "hit",
+    "*smear": "hit"
+  },
+  "hit_pad": 1,
+  "hurt_pad": -1,
+  "animations": {
+    "idle_down": {
+      "fps": 4,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_stand",
+            "front_body",
+            "front_head",
+            "front_sword"
+          ],
+          "duration": 400
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "front_body",
+            {
+              "from": "front_head",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "front_sword"
+          ],
+          "duration": 400
+        }
+      ]
+    },
+    "walk_down": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_step_l",
+            {
+              "from": {
+                "layers": [
+                  "front_body",
+                  "front_head",
+                  "front_sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "front_body",
+                  "front_head",
+                  "front_sword"
+                ]
+              },
+              "offset": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_step_r",
+            {
+              "from": {
+                "layers": [
+                  "front_body",
+                  "front_head",
+                  "front_sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "front_body",
+                  "front_head",
+                  "front_sword"
+                ]
+              },
+              "offset": [
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "attack_down": {
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_stand",
+            "front_torso",
+            "front_head",
+            "down_sword_windup",
+            "down_arm_windup"
+          ],
+          "duration": 220
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "down_smear_trail",
+            "down_smear",
+            {
+              "from": {
+                "layers": [
+                  "front_torso",
+                  "front_head",
+                  "down_arm_strike",
+                  "down_sword_strike"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ],
+          "duration": 60,
+          "active": true
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "front_torso",
+                  "front_head",
+                  "down_sword_follow",
+                  "down_arm_follow"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ],
+          "duration": 140,
+          "active": true
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "front_body",
+            "front_head",
+            "front_sword"
+          ],
+          "duration": 200
+        }
+      ]
+    },
+    "idle_up": {
+      "fps": 4,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_stand",
+            "back_sword",
+            "back_body",
+            "back_head"
+          ],
+          "duration": 400
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "back_sword",
+            "back_body",
+            {
+              "from": "back_head",
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ],
+          "duration": 400
+        }
+      ]
+    },
+    "walk_up": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_step_l",
+            {
+              "from": {
+                "layers": [
+                  "back_sword",
+                  "back_body",
+                  "back_head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "back_sword",
+                  "back_body",
+                  "back_head"
+                ]
+              },
+              "offset": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_step_r",
+            {
+              "from": {
+                "layers": [
+                  "back_sword",
+                  "back_body",
+                  "back_head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "back_sword",
+                  "back_body",
+                  "back_head"
+                ]
+              },
+              "offset": [
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "attack_up": {
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            "front_legs_stand",
+            "up_sword_windup",
+            "back_torso",
+            "back_head",
+            "up_arm_windup"
+          ],
+          "duration": 220
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "up_smear_trail",
+            "up_smear",
+            {
+              "from": {
+                "layers": [
+                  "back_torso",
+                  "back_head",
+                  "up_arm_strike",
+                  "up_sword_strike"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ],
+          "duration": 60,
+          "active": true
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            {
+              "from": {
+                "layers": [
+                  "back_torso",
+                  "back_head",
+                  "up_sword_follow",
+                  "up_arm_follow"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ],
+          "duration": 140,
+          "active": true
+        },
+        {
+          "layers": [
+            "front_legs_stand",
+            "back_sword",
+            "back_body",
+            "back_head"
+          ],
+          "duration": 200
+        }
+      ]
+    },
+    "idle_side": {
+      "fps": 4,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "side_legs_stand",
+            "side_body",
+            "side_sword"
+          ],
+          "duration": 400
+        },
+        {
+          "layers": [
+            "side_legs_stand",
+            "side_body_breathe",
+            "side_sword"
+          ],
+          "duration": 400
+        }
+      ]
+    },
+    "walk_side": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "side_legs_contact_a",
+            {
+              "layers": [
+                "side_body",
+                "side_sword"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "side_legs_contact_a",
+            {
+              "from": {
+                "layers": [
+                  "side_body",
+                  "side_sword"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "side_legs_pass_b",
+            {
+              "from": {
+                "layers": [
+                  "side_body",
+                  "side_sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "side_legs_contact_b",
+            {
+              "layers": [
+                "side_body",
+                "side_sword"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "side_legs_contact_b",
+            {
+              "from": {
+                "layers": [
+                  "side_body",
+                  "side_sword"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "side_legs_pass_a",
+            {
+              "from": {
+                "layers": [
+                  "side_body",
+                  "side_sword"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "attack_side": {
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            "side_legs_stand",
+            "side_torso",
+            {
+              "from": "side_sword",
+              "flip": "h",
+              "offset": [
+                -3,
+                -1
+              ]
+            },
+            "side_arm_back"
+          ],
+          "duration": 220
+        },
+        {
+          "layers": [
+            "side_legs_contact_a",
+            "side_smear_trail",
+            "side_smear",
+            "side_torso",
+            {
+              "from": "side_sword",
+              "offset": [
+                5,
+                -6
+              ]
+            },
+            "side_arm_up"
+          ],
+          "duration": 60,
+          "active": true
+        },
+        {
+          "layers": [
+            "side_legs_contact_a",
+            {
+              "from": {
+                "layers": [
+                  "side_torso",
+                  "side_sword_fwd",
+                  "side_arm_fwd"
+                ]
+              },
+              "offset": [
+                1,
+                0
+              ]
+            }
+          ],
+          "duration": 140,
+          "active": true
+        },
+        {
+          "layers": [
+            "side_legs_contact_a",
+            "side_body",
+            "side_sword_down"
+          ],
+          "duration": 160
+        },
+        {
+          "layers": [
+            "side_legs_stand",
+            "side_body",
+            "side_sword"
+          ],
+          "duration": 200
+        }
+      ]
+    }
+  }
+}

@@ -1,5 +1,10 @@
 {
   "sprites": [
-    "knight"
+    "knight",
+    "knight_overhead",
+    "knight_topdown"
+  ],
+  "tilesets": [
+    "terrain"
   ]
 }

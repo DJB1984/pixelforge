@@ -77,6 +77,15 @@
   .strip button.on canvas { outline-color: var(--accent); }
   .strip button.on { color: var(--ink); }
 
+  .tilegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr)); gap: 12px; }
+  .tilecard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+              display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .tilecard canvas, .mapview canvas { image-rendering: pixelated; display: block; max-width: 100%; height: auto;
+                                      border-radius: 6px; }
+  .tilecard .facts code { flex-basis: auto; }
+  .mapview { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+             display: grid; gap: 8px; justify-items: start; overflow-x: auto; }
+
   footer { color: var(--muted); font-size: 13px; padding-block: 0 40px; display: grid; gap: 8px; }
   footer pre { font: 12px/1.6 var(--mono); background: var(--surface); border: 1px solid var(--line);
                border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0; color: var(--ink); }
@@ -184,6 +193,75 @@ function buildTile(sprite, anim) {
   return el;
 }
 
+// Tilesets: each tile repeated 3x3 (so seams show), then the sample map from sprite.json.
+// Animated tiles: ts.anims[i] = [[slot, ms], ...] on one shared clock, as in the game.
+const tileViews = [];
+let tileClock = 0, tilesPlaying = !reduceMotion, tileSig = '';
+function tileSrc(ts, i) {
+  return [(i % ts.cols) * (ts.w + ts.spacing), Math.floor(i / ts.cols) * (ts.h + ts.spacing)];
+}
+function slotAt(ts, i) {
+  const a = ts.anims?.[i];
+  if (!a) return i;
+  let t = tileClock % a.reduce((sum, [, ms]) => sum + ms, 0);
+  for (const [slot, ms] of a) { if (t < ms) return slot; t -= ms; }
+  return i;
+}
+function tickTiles(dt) {
+  if (!tilesPlaying) return;
+  tileClock += dt;
+  const sig = DATA.tilesets.map((ts) => Object.keys(ts.anims ?? {}).map((i) => slotAt(ts, i)).join(',')).join('|');
+  if (sig !== tileSig) { tileSig = sig; paintTileViews(); }
+}
+function paintTileViews() {
+  const z = Math.max(1, Math.round(opts.zoom / 2));
+  for (const v of tileViews) {
+    const { ts, ctx } = v;
+    const cols = v.rows ? Math.max(...v.rows.map((r) => r.length)) : 3, rows = v.rows ? v.rows.length : 3;
+    ctx.canvas.width = cols * ts.w * z; ctx.canvas.height = rows * ts.h * z;
+    ctx.imageSmoothingEnabled = false;
+    const bg = STAGES[opts.stage];
+    ctx.fillStyle = bg === 'check' ? '#d9dde6' : bg;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const i = v.rows ? v.rows[y][x] ?? -1 : v.index;
+      if (i < 0) continue;
+      const [sx, sy] = tileSrc(ts, slotAt(ts, i));
+      ctx.drawImage(ts.img, sx, sy, ts.w, ts.h, x * ts.w * z, y * ts.h * z, ts.w * z, ts.h * z);
+    }
+  }
+}
+function buildTileset(ts) {
+  const sec = document.createElement('section');
+  sec.className = 'char';
+  sec.id = ts.name;
+  sec.innerHTML = `<div class="char-head"><h2>${ts.name}</h2>
+    <span class="meta">tileset · ${ts.w}×${ts.h} px tiles · ${ts.tiles.length} tiles · ${ts.palette.length} colors</span>
+    <div class="swatches">${ts.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
+    <div class="tilegrid"></div>`;
+  const grid = sec.querySelector('.tilegrid');
+  ts.tiles.forEach((t, i) => {
+    const card = document.createElement('article');
+    card.className = 'tilecard';
+    const frames = ts.anims?.[i];
+    const props = [frames ? `${frames.length}-frame anim` : '',
+                   ...Object.entries(t.props).map(([k, v]) => (v === true ? k : `${k}=${v}`))].filter(Boolean).join(' ');
+    card.innerHTML = `<canvas></canvas><div class="tile-head"><strong>${t.name}</strong><span class="badge">#${i}</span></div>
+      ${props ? `<div class="facts"><code>${props}</code></div>` : ''}`;
+    card.title = `Tile ${i}: ${t.name}, repeated 3×3`;
+    tileViews.push({ ts, index: i, ctx: card.querySelector('canvas').getContext('2d') });
+    grid.append(card);
+  });
+  if (ts.sample.length) {
+    const m = document.createElement('div');
+    m.className = 'mapview';
+    m.innerHTML = `<div class="tile-head"><strong>Sample map</strong><span class="badge">sprite.json "sample"</span></div><canvas></canvas>`;
+    tileViews.push({ ts, rows: ts.sample, ctx: m.querySelector('canvas').getContext('2d') });
+    sec.append(m);
+  }
+  return sec;
+}
+
 function paintStrips() {
   for (const t of tiles) t.strip.forEach((b, i) => paint(b.querySelector('canvas').getContext('2d'), t, i, t.sprite.w > 40 ? 1 : 2));
 }
@@ -208,14 +286,16 @@ function segmented(id, values, current, onPick) {
 }
 
 async function init() {
-  const sprites = DATA.sprites;
+  const sprites = DATA.sprites, tilesets = DATA.tilesets ?? [];
   const animCount = sprites.reduce((a, s) => a + s.anims.length, 0);
   const frameCount = sprites.reduce((a, s) => a + s.anims.reduce((b, an) => b + an.frames.length, 0), 0);
+  const tileCount = tilesets.reduce((a, t) => a + t.tiles.length, 0);
   $('game').textContent = DATA.game;
   $('summary').textContent = `${sprites.length} character${sprites.length === 1 ? '' : 's'} · ${animCount} animations · ` +
-    `${frameCount} frames · exported ${DATA.generated}`;
+    `${frameCount} frames · ` + (tilesets.length ? `${tilesets.length} tileset${tilesets.length === 1 ? '' : 's'} · ${tileCount} tiles · ` : '') +
+    `exported ${DATA.generated}`;
 
-  await Promise.all(sprites.map((s) => { s.img = new Image(); s.img.src = s.sheet; return s.img.decode(); }));
+  await Promise.all([...sprites, ...tilesets].map((s) => { s.img = new Image(); s.img.src = s.sheet; return s.img.decode(); }));
 
   for (const s of sprites) {
     const sec = document.createElement('section');
@@ -228,7 +308,10 @@ async function init() {
     const grid = sec.querySelector('.grid');
     s.anims.forEach((a) => grid.append(buildTile(s, a)));
     $('main').append(sec);
-    if (sprites.length > 1) {
+  }
+  for (const ts of tilesets) $('main').append(buildTileset(ts));
+  if (sprites.length + tilesets.length > 1) {
+    for (const s of [...sprites, ...tilesets]) {
       const a = document.createElement('a');
       a.href = `#${s.name}`;
       a.textContent = s.name;
@@ -236,11 +319,12 @@ async function init() {
     }
   }
 
-  segmented('zoom', ZOOMS.map((z) => [`${z}×`, z]), () => opts.zoom, (z) => { opts.zoom = z; layout(); });
-  segmented('stagebg', Object.keys(STAGES).map((k) => [k, k]), () => opts.stage, (k) => { opts.stage = k; paintStrips(); layout(); });
+  segmented('zoom', ZOOMS.map((z) => [`${z}×`, z]), () => opts.zoom, (z) => { opts.zoom = z; layout(); paintTileViews(); });
+  segmented('stagebg', Object.keys(STAGES).map((k) => [k, k]), () => opts.stage, (k) => { opts.stage = k; paintStrips(); layout(); paintTileViews(); });
   $('playall').onclick = () => {
-    const anyPlaying = tiles.some((t) => t.playing);
+    const anyPlaying = tiles.some((t) => t.playing) || tilesPlaying;
     tiles.forEach((t) => { t.playing = !anyPlaying; });
+    tilesPlaying = !anyPlaying;
     $('playall').textContent = anyPlaying ? 'Play all' : 'Pause all';
   };
   if (reduceMotion) $('playall').textContent = 'Play all';
@@ -249,19 +333,28 @@ async function init() {
   const first = sprites[0];
   $('usage').textContent = [
     `// Phaser 3, with pixelArt: true. Files: export/<name>.png + export/<name>.json + export/pixelforge.js`,
-    `import { loadPixelforge, createPixelforgeAnims, enablePixelforgeHits } from './export/pixelforge.js';`,
-    `preload() { ${sprites.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
-    `create()  { ${sprites.map((s) => `createPixelforgeAnims(this, '${s.name}');`).join(' ')}`,
-    `            const hero = this.add.sprite(200, 150, '${first.name}').play('${first.name}_${first.anims[0].name}');`,
-    `            enablePixelforgeHits(this, hero, () => enemies, (enemy) => enemy.takeDamage(1)); }`,
+    ...(first ? [
+      `import { loadPixelforge, createPixelforgeAnims, enablePixelforgeHits } from './export/pixelforge.js';`,
+      `preload() { ${sprites.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
+      `create()  { ${sprites.map((s) => `createPixelforgeAnims(this, '${s.name}');`).join(' ')}`,
+      `            const hero = this.add.sprite(200, 150, '${first.name}').play('${first.name}_${first.anims[0].name}');`,
+      `            enablePixelforgeHits(this, hero, () => enemies, (enemy) => enemy.takeDamage(1)); }`] : []),
+    ...tilesets.flatMap((t) => [
+      `// tileset ${t.name}: tile index = position in sprite.json "tiles"`,
+      `import { loadPixelforgeTiles, pixelforgeTilemap } from './export/pixelforge.js';`,
+      `preload() { loadPixelforgeTiles(this, '${t.name}'); }`,
+      `create()  { const { map, layer } = pixelforgeTilemap(this, '${t.name}');   // its sample map, collides set`,
+      `            this.physics.add.collider(hero, layer); }`]),
   ].join('\n');
 
   paintStrips();
   layout();
+  paintTileViews();
   let last = performance.now();
   const tick = (now) => {
     const dt = now - last;
     last = now;
+    tickTiles(dt);
     for (const t of tiles) {
       if (!t.playing) continue;
       const n = t.anim.frames.length;

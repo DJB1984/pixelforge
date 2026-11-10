@@ -1,6 +1,7 @@
 """Rendering grids to PNG previews (for an AI or human to inspect), contact sheets and GIFs."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -173,6 +174,87 @@ def sheet(sprite: Sprite, anims: list[str], scale: int = 6, onion: bool = False,
     return img
 
 
+def tiled(img: Image.Image, nx: int, ny: int) -> Image.Image:
+    out = Image.new("RGBA", (img.width * nx, img.height * ny), (0, 0, 0, 0))
+    for y in range(ny):
+        for x in range(nx):
+            out.alpha_composite(img, (x * img.width, y * img.height))
+    return out
+
+
+def map_image(sprite: Sprite, rows: list[list[int]], t_ms: int = 0) -> Image.Image:
+    """1:1 image of a map given as rows of tile indices (-1 = empty), `t_ms` into its animations."""
+    tw, th = sprite.width, sprite.height
+    tiles = [to_image(sprite, sprite.tile(n, t_ms)) for n in sprite.tile_names()]
+    out = Image.new("RGBA", (max((len(r) for r in rows), default=0) * tw or 1, len(rows) * th or 1), (0, 0, 0, 0))
+    for y, row in enumerate(rows):
+        for x, i in enumerate(row):
+            if i >= 0:
+                out.alpha_composite(tiles[i], (x * tw, y * th))
+    return out
+
+
+def tileset_preview(sprite: Sprite, names: list[str] | None = None, scale: int = 4, repeat: int = 3,
+                    sample: bool = True) -> Image.Image:
+    """Every tile repeated `repeat`x`repeat` (seams show up as lines), labelled with its index and
+    properties; then each animated tile's frames side by side (each repeated 2x2); then the
+    sprite.json sample map (zoomed, plus 1x)."""
+    pad, label_h = 10, 30
+    names = names or sprite.tile_names()
+    cw, ch = sprite.width * repeat * scale, sprite.height * repeat * scale
+    cell_w = max(cw, 120)
+    per_row = max(1, min(len(names), 1200 // (cell_w + pad)))
+    n_rows = -(-len(names) // per_row) if names else 0
+    sample_rows = sprite.sample_map() if sample else []
+    smap = zoom(map_image(sprite, sample_rows), max(1, scale // 2)) if sample_rows else None
+    animated = [n for n in names if n in sprite.tile_anims]
+    fw, fh = sprite.width * 2 * scale, sprite.height * 2 * scale   # one animation frame, repeated 2x2
+    anim_w = max((180 + len(sprite.tile_anims[n]) * (fw + pad) for n in animated), default=0)
+    width = max(pad + per_row * (cell_w + pad), anim_w + pad)
+    height = pad + n_rows * (label_h + ch + pad)
+    anim_y = height + (24 if animated else 0)
+    height = anim_y + len(animated) * (fh + 16 + pad)
+    if smap:
+        width = max(width, smap.width + pad * 2 + sprite.width * len(sample_rows[0]) + pad)
+        height += 24 + smap.height + pad
+    img = Image.new("RGBA", (width, height), LABEL_BG)
+    d = ImageDraw.Draw(img)
+    f, f_small = font(13), font(10)
+    for k, name in enumerate(names):
+        i = sprite.tile_index(name)
+        x0 = pad + (k % per_row) * (cell_w + pad)
+        y0 = pad + (k // per_row) * (label_h + ch + pad)
+        d.text((x0, y0), f"{i}  {name}", fill=LABEL_FG, font=f)
+        props = " ".join(f"{p}={v}" if v is not True else p for p, v in sprite.tile_properties(name).items())
+        if name in sprite.tile_anims:
+            props = f"{len(sprite.tile_anims[name])}-frame anim  {props}"
+        if props:
+            d.text((x0, y0 + 16), props, fill=(150, 150, 160, 255), font=f_small)
+        cell = checkerboard(cw, ch, scale * 2)
+        cell.alpha_composite(zoom(tiled(to_image(sprite, sprite.tile(name)), repeat, repeat), scale))
+        img.alpha_composite(cell, (x0, y0 + label_h))
+    if animated:
+        d.text((pad, anim_y - 20), "animated tiles (each frame repeated 2x2)", fill=LABEL_FG, font=f)
+    for k, name in enumerate(animated):
+        y0 = anim_y + k * (fh + 16 + pad)
+        frames = sprite.tile_anims[name]
+        d.text((pad, y0 + 16 + fh / 2), f"{sprite.tile_index(name)}  {name}", fill=LABEL_FG, font=f, anchor="lm")
+        d.text((pad, y0 + 16 + fh / 2 + 16), f"{sum(ms for _, ms in frames)} ms loop",
+               fill=(150, 150, 160, 255), font=f_small, anchor="lm")
+        for j, (entry, ms) in enumerate(frames):
+            x0 = 180 + j * (fw + pad)
+            d.text((x0, y0), f"{j}  {ms}ms", fill=LABEL_FG, font=f_small)
+            cell = checkerboard(fw, fh, scale * 2)
+            cell.alpha_composite(zoom(tiled(to_image(sprite, sprite.resolve(entry)), 2, 2), scale))
+            img.alpha_composite(cell, (x0, y0 + 16))
+    if smap:
+        y0 = height - smap.height - pad - 24
+        d.text((pad, y0 + 4), "sample map (sprite.json \"sample\")", fill=LABEL_FG, font=f)
+        img.alpha_composite(smap, (pad, y0 + 24))
+        img.alpha_composite(map_image(sprite, sample_rows), (pad * 2 + smap.width, y0 + 24))
+    return img
+
+
 def palette_swatch(sprite: Sprite, cell: int = 40) -> Image.Image:
     items = list(sprite.palette_raw.items())
     cols = 8
@@ -185,6 +267,49 @@ def palette_swatch(sprite: Sprite, cell: int = 40) -> Image.Image:
         d.text((x + cell + 6, y + 4), f"'{key}'", fill=LABEL_FG, font=font(14))
         d.text((x + cell + 6, y + 22), raw[:10], fill=(170, 170, 180, 255), font=font(10))
     return img
+
+
+def tile_timeline(sprite: Sprite, names: list[str], max_ms: int = 12000) -> list[tuple[int, int]]:
+    """[(start_ms, duration_ms)] covering one full cycle of every listed animated tile together
+    (the least common multiple of their loop lengths, capped at max_ms), split wherever any of
+    them changes frame."""
+    loops = [sprite.tile_anims[n] for n in names
+             if n in sprite.tile_anims and all(ms > 0 for _, ms in sprite.tile_anims[n])]
+    if not loops:
+        return [(0, 1000)]
+    length = 1
+    for frames in loops:
+        length = math.lcm(length, sum(ms for _, ms in frames))
+    length = min(length, max_ms)
+    cuts = {0, length}
+    for frames in loops:
+        t = 0
+        while t < length:
+            for _, ms in frames:
+                cuts.add(min(t, length))
+                t += ms
+    cuts = sorted(cuts)
+    return [(a, b - a) for a, b in zip(cuts, cuts[1:]) if b > a]
+
+
+def save_tiles_gif(sprite: Sprite, path: Path, tile: str | None = None, scale: int = 4,
+                   bg: tuple[int, int, int] = (60, 64, 72)) -> None:
+    """Animated GIF of one tile repeated 3x3, or (tile=None) of the sample map, at real timing."""
+    if tile:
+        rows = [[sprite.tile_index(tile)] * 3] * 3
+        names = [tile]
+    else:
+        rows = sprite.sample_map()
+        names = sorted({sprite.tile_names()[i] for r in rows for i in r if i >= 0})
+    timeline = tile_timeline(sprite, names)
+    frames = []
+    for t, _ in timeline:
+        m = map_image(sprite, rows, t)
+        base = Image.new("RGBA", m.size, bg + (255,))
+        base.alpha_composite(m)
+        frames.append(zoom(base, scale).convert("RGB").quantize(colors=255, method=Image.Quantize.MEDIANCUT))
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=[ms for _, ms in timeline],
+                   loop=0, disposal=2, optimize=False)
 
 
 def save_gif(sprite: Sprite, anim: str, path: Path, scale: int = 8,

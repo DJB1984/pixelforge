@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .boxes import frame_boxes
 from .grid import TRANSPARENT, Grid
-from .model import Sprite, SpriteError, describe_entry, load_game_palette
+from .model import ROLES, Sprite, SpriteError, describe_entry, load_game_palette
 
 MAX_PALETTE = 16
 BIG_DIFF_RATIO = 0.45
@@ -73,6 +73,9 @@ def check_sprite(name: str) -> list[Issue]:
     for a in s.animations.values():
         for e in a.frames:
             collect(e)
+    for name, e in s.tiles:
+        for fe, _ in s.tile_frames(name):
+            collect(fe)
 
     for pattern in s.roles:
         if not any(fnmatch.fnmatchcase(f, pattern) for f in s.frame_ids()):
@@ -91,7 +94,10 @@ def check_sprite(name: str) -> list[Issue]:
             keys = sorted({g.cells[y][x] for x, y in bad})
             issues.append(Issue("error", where, f"undefined palette keys {keys} at {_coords(bad)}"))
         if fid not in used:
-            issues.append(Issue("info", where, "not used by any animation"))
+            issues.append(Issue("info", where, "not used by any " + ("tile" if s.kind == "tileset" else "animation")))
+
+    if s.kind == "tileset":
+        return issues + check_tiles(s)
 
     # ---- animations ----
     if not s.animations:
@@ -135,13 +141,19 @@ def check_sprite(name: str) -> list[Issue]:
                     issues.append(Issue("info", f"{where}[{i}]", f"hurtbox {[x, y, w, h]} pokes {over}px outside "
                                                                  f"the body box {[bx, by, bw, bh]}"))
 
-        bottoms = [g.bbox()[3] for _, g in valid]
+        # feet = lowest *body* pixel: weapons and effects (hit/none layers) may swing below the feet.
+        # Centre-anchored (overhead) sprites have no feet to plant, so these checks don't apply.
+        bottoms = []
+        for i, g in valid if s.anchor == "feet" else []:
+            _, roles = s.resolve_roles(a.frames[i])
+            body = [y for y, row in enumerate(roles.cells) if ROLES["hurt"] in row]
+            bottoms.append(max(body) if body else g.bbox()[3])
         if len(set(bottoms)) > 1:
             level = "warn" if a.loop else "info"
             issues.append(Issue(level, where,
                                 f"lowest opaque row varies across frames {bottoms}; feet may jitter "
                                 f"(ignore for jumps/bobs that are intentional)"))
-        if all(b != oy - 1 for b in bottoms):
+        if bottoms and all(b != oy - 1 for b in bottoms):
             issues.append(Issue("info", where, f"no frame stands on the origin (origin y={oy} expects lowest row "
                                                f"{oy - 1}; got {sorted(set(bottoms))})"))
 
@@ -158,11 +170,94 @@ def check_sprite(name: str) -> list[Issue]:
             # Ignore whole-sprite shifts (bobs, steps): measure change after the best small realignment.
             moved = min(len(gi.offset(dx, dy).diff(gj)) for dx in range(-2, 3) for dy in range(-2, 3))
             if union and moved / union > BIG_DIFF_RATIO:
-                issues.append(Issue("warn", where,
+                # snapping into/out of an active (smear/strike) frame is the point of an attack
+                snap = a.active(i) or a.active(j)
+                issues.append(Issue("info" if snap else "warn", where,
                                     f"frames {i}->{j} change {moved}/{union} pixels ({moved / union:.0%}) even "
-                                    f"after aligning shifts; motion may look like a jump cut"))
+                                    f"after aligning shifts; " + ("expected for an active attack frame" if snap
+                                                                  else "motion may look like a jump cut")))
             if changed == 0 and len(grids) > 1:
                 issues.append(Issue("info", where, f"frames {i} and {j} are identical"))
+    return issues
+
+
+def _lum(rgba) -> float:
+    r, g, b, _ = rgba
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def seams(s: Sprite, g: Grid) -> list[str]:
+    """Edges that show a line when the tile repeats: the jump in brightness across the wrap
+    (last column -> first, bottom row -> top) is far bigger than between neighbours inside it."""
+    lum = [[_lum(s.color(c)) if c != TRANSPARENT else None for c in row] for row in g.cells]
+    out = []
+    for axis, cells in (("left-right", lum), ("top-bottom", [list(col) for col in zip(*lum)])):
+        inner = [abs(a - b) for row in cells for a, b in zip(row, row[1:]) if a is not None and b is not None]
+        wrap = [abs(row[-1] - row[0]) for row in cells if row[-1] is not None and row[0] is not None]
+        if inner and wrap:
+            mi, mw = sum(inner) / len(inner), sum(wrap) / len(wrap)
+            if mw > 24 and mw > 2.5 * mi:
+                out.append(axis)
+    return out
+
+
+def check_tiles(s: Sprite) -> list[Issue]:
+    issues: list[Issue] = []
+    name = s.name
+    if not s.tiles:
+        issues.append(Issue("warn", name, "tileset has no tiles (add them to \"tiles\" in sprite.json)"))
+    seen: set[str] = set()
+    for i, (tname, entry) in enumerate(s.tiles):
+        where = f"{name}:tile {i} {tname!r}"
+        if tname in seen:
+            issues.append(Issue("error", where, "duplicate tile name; each tile needs its own"))
+        seen.add(tname)
+        frames = s.tile_frames(tname)
+        animated = tname in s.tile_anims
+        if animated and len(frames) == 1:
+            issues.append(Issue("warn", where, "\"frames\" has a single frame, so it never animates"))
+        if animated and any(ms <= 0 for _, ms in frames):
+            issues.append(Issue("error", where, "frame durations must be positive"))
+        grids: list[Grid] = []
+        seam_axes: set[str] = set()
+        for j, (fe, _) in enumerate(frames):
+            fwhere = f"{where} frame {j}" if animated else where
+            try:
+                g = s.resolve(fe)
+            except SpriteError as e:
+                issues.append(Issue("error", fwhere, f"{describe_entry(fe)}: {e}"))
+                continue
+            if grids and not g.diff(grids[-1]):
+                issues.append(Issue("info", fwhere, f"same as frame {j - 1}"))
+            grids.append(g)
+            clear = g.width * g.height - g.opaque_count()
+            if clear == g.width * g.height:
+                issues.append(Issue("warn", fwhere, "tile is empty"))
+            elif clear:
+                if j == 0:
+                    issues.append(Issue("info", fwhere, f"{clear} transparent pixels (fine for overlays such as "
+                                                        f"flowers or edges drawn on a second layer; ground tiles "
+                                                        f"usually fill every pixel)"))
+            else:
+                seam_axes.update(seams(s, g))
+        for axis in sorted(seam_axes):
+            issues.append(Issue("warn", where, f"visible seam when repeated {axis}: the wrapped edge jumps "
+                                               f"in brightness much more than the inside does (`tiles "
+                                               f"{name}` shows it; fine for edge/transition tiles)"))
+    for pattern in s.tile_props:
+        if not any(fnmatch.fnmatchcase(t, pattern) for t in s.tile_names()):
+            issues.append(Issue("info", f"{name}/properties", f"pattern {pattern!r} matches no tiles"))
+    if s.sample:
+        legend = s.sample.get("legend", {})
+        for c, tname in legend.items():
+            if tname not in seen:
+                issues.append(Issue("error", f"{name}/sample", f"legend {c!r} -> {tname!r}: no such tile"))
+        rows = s.sample.get("rows", [])
+        if len({len(r) for r in rows}) > 1:
+            issues.append(Issue("warn", f"{name}/sample", f"rows have different lengths {sorted({len(r) for r in rows})}"))
+        bad = sorted({c for r in rows for c in r if c not in legend and c not in " ."})
+        if bad:
+            issues.append(Issue("error", f"{name}/sample", f"characters not in the legend: {' '.join(bad)}"))
     return issues
 
 

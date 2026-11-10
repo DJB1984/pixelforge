@@ -35,10 +35,12 @@ def _size(s: str) -> tuple[int, int]:
 
 
 def _frame_target(s: Sprite, anim: str, index: str):
-    """`anim index` or `@frame_id` addressing. Returns (grid, label, prev, next)."""
+    """`anim index`, `@frame_id` or (tilesets) `tile_name` addressing. Returns (grid, label, prev, next)."""
     if anim.startswith("@"):
         fid = anim[1:]
         return s.load_frame(fid, strict=False), f"{s.name} @{fid}", None, None
+    if s.kind == "tileset":
+        return s.tile(anim), f"{s.name} tile {s.tile_index(anim)} {anim}", None, None
     a = s.anim(anim)
     i = int(index) % len(a.frames)
     frames = s.anim_frames(anim)
@@ -52,6 +54,10 @@ def _frame_target(s: Sprite, anim: str, index: str):
 def cmd_list(args):
     for n in list_sprites():
         s = Sprite.load(n)
+        if s.kind == "tileset":
+            print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  tileset: {len(s.tiles)} tiles "
+                  f"({', '.join(s.tile_names()[:6])}{', ...' if len(s.tiles) > 6 else ''})")
+            continue
         anims = ", ".join(f"{k}({len(a.frames)})" for k, a in s.animations.items())
         print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {anims}")
 
@@ -61,6 +67,16 @@ def cmd_new(args):
     if path.exists():
         sys.exit(f"{_rel(path)} already exists")
     meta: dict = {"name": args.name}
+    if args.tileset:
+        w, h = _size(args.size or "16")
+        meta.update({"type": "tileset", "size": [w, h], "columns": model.TILE_COLUMNS,
+                     "palette": {"k": "outline", "g": "green", "G": "forest"},
+                     "tiles": ["tile_0"], "properties": {"wall*": {"collides": True}}})
+        (path / "frames").mkdir(parents=True)
+        (path / "frames" / "tile_0.txt").write_text(Grid.blank(w, h).to_text(), encoding="utf-8")
+        (path / "sprite.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        print(f"created {_rel(path)}/sprite.json and frames/tile_0.txt ({w}x{h} tileset)")
+        return
     if args.size:
         w, h = _size(args.size)
         meta.update(size=[w, h], origin=[w // 2, h])
@@ -92,11 +108,12 @@ def cmd_resize(args):
         if args.cls not in classes:
             sys.exit(f"unknown class {args.cls!r}; known: {', '.join(classes)}")
         w, h = classes[args.cls]["size"]
+        nox, noy = classes[args.cls].get("origin", [w // 2, h])
     elif args.size:
         w, h = _size(args.size)
+        nox, noy = w // 2, h
     else:
         sys.exit("give a size (e.g. 64x48) or --class")
-    nox, noy = w // 2, h
     dx, dy = nox - s.origin[0], noy - s.origin[1]
     lost = []
     for fid in s.frame_ids():
@@ -137,7 +154,7 @@ def cmd_render(args):
     s = Sprite.load(args.sprite)
     g, label, prev, nxt = _frame_target(s, args.anim, args.index)
     boxes = None
-    if not args.no_boxes:
+    if not args.no_boxes and s.kind != "tileset":
         if args.anim.startswith("@"):  # a raw layer: show its role as if active
             boxes = frame_boxes(s, args.anim[1:], active=True)
         else:
@@ -148,15 +165,30 @@ def cmd_render(args):
                 label += "  ACTIVE"
     img = rd.preview(s, g, scale=args.scale, title=label,
                      prev=prev if args.onion else None, nxt=nxt if args.onion else None,
-                     gridlines=not args.no_grid, boxes=boxes)
-    tag = args.anim.lstrip("@") + ("" if args.anim.startswith("@") else f"_{int(args.index)}")
+                     gridlines=not args.no_grid, boxes=boxes, show_origin=s.kind != "tileset")
+    tag = args.anim.lstrip("@") + ("" if args.anim.startswith("@") or s.kind == "tileset" else f"_{int(args.index)}")
     out = Path(args.out) if args.out else _previews() / f"{s.name}_{tag}{'_onion' if args.onion else ''}.png"
+    img.save(out)
+    print(_rel(out))
+
+
+def cmd_tiles(args):
+    s = Sprite.load(args.tileset)
+    if s.kind != "tileset":
+        sys.exit(f"{s.name} is not a tileset (sprite.json needs \"type\": \"tileset\"); use `sheet` for sprites")
+    for t in args.tiles:
+        s.tile_index(t)
+    img = rd.tileset_preview(s, args.tiles or None, scale=args.scale, repeat=args.repeat)
+    out = _previews() / f"{s.name}_tiles{'_' + '_'.join(args.tiles) if args.tiles else ''}.png"
     img.save(out)
     print(_rel(out))
 
 
 def cmd_sheet(args):
     s = Sprite.load(args.sprite)
+    if s.kind == "tileset":
+        args.tileset, args.tiles, args.repeat = args.sprite, [], 3
+        return cmd_tiles(args)
     anims = args.anims or list(s.animations)
     for a in anims:
         s.anim(a)
@@ -169,6 +201,15 @@ def cmd_sheet(args):
 
 def cmd_gif(args):
     s = Sprite.load(args.sprite)
+    if s.kind == "tileset":  # `gif terrain` = the sample map; `gif terrain water` = one tile, 3x3
+        if args.anim:
+            s.tile_index(args.anim)
+        elif not s.sample:
+            sys.exit(f"{s.name} has no sample map; name a tile, e.g. `gif {s.name} {s.tile_names()[0]}`")
+        out = _previews() / f"{s.name}_{args.anim or 'sample'}.gif"
+        rd.save_tiles_gif(s, out, args.anim, scale=max(1, args.scale // 2))
+        print(_rel(out))
+        return
     anims = [args.anim] if args.anim else list(s.animations)
     for a in anims:
         out = _previews() / f"{s.name}_{a}.gif"
@@ -217,8 +258,7 @@ def _export(names: list[str], padding: int = 1) -> list[str]:
         out.append(f"{_rel(png)}  {_rel(js)}")
     ex.export_dir().mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS / "phaser" / "pixelforge.js", ex.export_dir() / "pixelforge.js")
-    exported = sorted(p.stem for p in ex.export_dir().glob("*.json") if p.stem != "index")
-    out.append(_rel(ex.write_index(exported)))
+    out.append(_rel(ex.write_index()))
     return out
 
 
@@ -333,7 +373,16 @@ def cmd_paint(args):
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
-    """Serves /viewer/ and /phaser/ from the installed package, everything else from the project."""
+    """Serves /viewer/ and /phaser/ from the installed package, everything else from the project.
+    / redirects to the sprite browser."""
+
+    def do_GET(self):
+        if self.path.split("?", 1)[0] in ("/", "/index.html"):
+            self.send_response(302)
+            self.send_header("Location", "/viewer/")
+            self.end_headers()
+            return
+        super().do_GET()
 
     def translate_path(self, path):
         parts = path.split("?", 1)[0].split("#", 1)[0].lstrip("/").split("/")
@@ -350,8 +399,9 @@ def cmd_serve(args):
     handler = lambda *a, **kw: _Handler(*a, directory=str(root()), **kw)  # noqa: E731
     with http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler) as httpd:
         print(f"serving {root()}")
-        print(f"  viewer:  http://127.0.0.1:{args.port}/viewer/")
+        print(f"  sprites: http://127.0.0.1:{args.port}/   (every character, animation and frame)")
         print(f"  phaser:  http://127.0.0.1:{args.port}/viewer/phaser.html")
+        print(f"  tiles:   http://127.0.0.1:{args.port}/viewer/tilemap.html  (tilesets' sample maps, walkable)")
         print(f"  gallery: http://127.0.0.1:{args.port}/export/gallery.html  (after `pixelforge gallery`)")
         print("Ctrl+C to stop")
         httpd.serve_forever()
@@ -435,14 +485,22 @@ def main(argv=None):
     q = sub.add_parser("new", help="scaffold a sprite")
     q.add_argument("name")
     q.add_argument("--class", dest="cls", default="humanoid", help="size class from pixelforge.json (default humanoid)")
-    q.add_argument("--size", help="explicit WxH instead of a class")
+    q.add_argument("--size", help="explicit WxH instead of a class (with --tileset: tile size, default 16x16)")
+    q.add_argument("--tileset", action="store_true", help="a tileset (terrain, walls, floors) instead of a sprite")
     q.set_defaults(fn=cmd_new)
+
+    q = sub.add_parser("tiles", help="tileset preview: each tile repeated 3x3 (shows seams) + the sample map")
+    q.add_argument("tileset")
+    q.add_argument("tiles", nargs="*", help="only these tiles (default: all)")
+    q.add_argument("--scale", type=int, default=4)
+    q.add_argument("--repeat", type=int, default=3)
+    q.set_defaults(fn=cmd_tiles)
 
     for name, fn, hlp in (("show", cmd_show, "print a frame as text with coordinates"),
                           ("render", cmd_render, "zoomed PNG preview of one frame")):
         q = sub.add_parser(name, help=hlp)
         q.add_argument("sprite")
-        q.add_argument("anim", help="animation name, or @frame_id for a raw frame file")
+        q.add_argument("anim", help="animation name, @frame_id for a raw frame file, or a tileset's tile name")
         q.add_argument("index", nargs="?", default="0")
         if name == "render":
             q.add_argument("--scale", type=int, default=16)
@@ -466,7 +524,7 @@ def main(argv=None):
     q.add_argument("--class", dest="cls", help="use a size class instead of WxH")
     q.set_defaults(fn=cmd_resize)
 
-    q = sub.add_parser("gif", help="animated GIF preview(s)")
+    q = sub.add_parser("gif", help="animated GIF preview(s); for a tileset: its sample map, or one tile")
     q.add_argument("sprite")
     q.add_argument("anim", nargs="?")
     q.add_argument("--scale", type=int, default=8)

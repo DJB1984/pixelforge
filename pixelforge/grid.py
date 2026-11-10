@@ -95,6 +95,12 @@ class Grid:
                 out.set(x + dx, y + dy, self.cells[y][x])
         return out
 
+    def roll(self, dx: int, dy: int) -> "Grid":
+        """Like offset, but pixels pushed off one edge come back on the opposite one (for tiles)."""
+        return Grid(self.width, self.height,
+                    [[self.cells[(y - dy) % self.height][(x - dx) % self.width] for x in range(self.width)]
+                     for y in range(self.height)])
+
     def flip(self, axis: str) -> "Grid":
         if axis == "h":
             return Grid(self.width, self.height, [r[::-1] for r in self.cells])

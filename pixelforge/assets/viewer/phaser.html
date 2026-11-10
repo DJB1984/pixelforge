@@ -39,55 +39,120 @@ class TestScene extends Phaser.Scene {
       const anims = createPixelforgeAnims(this, name);
       const frame = this.textures.getFrame(name, '0');
       const fw = frame.realWidth * SCALE, fh = frame.realHeight * SCALE;
-      // one row of every animation
-      y += fh + 20;
-      lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
-      this.add.text(8, y - fh - 16, name, { fontSize: '14px', color: '#ddd' });
-      anims.forEach((anim, col) => {
+      // every animation, wrapping onto more rows when they don't fit
+      const perRow = Math.max(1, Math.floor((this.scale.width - 20) / (fw + 10)));
+      y += 44;
+      this.add.text(8, y - 16, name, { fontSize: "16px", color: "#fff" });
+      anims.forEach((anim, i) => {
+        const col = i % perRow;
+        if (col === 0) {
+          y += fh + (i === 0 ? 20 : 30);
+          lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
+        }
         const x = 20 + fw / 2 + col * (fw + 10);
         const s = this.add.sprite(x, y, name).setScale(SCALE).play(anim.key);
         this.shown.push(s);
-        this.add.text(x, y + 4, `${anim.key}  ${anim.frames.length}f ${anim.repeat === -1 ? 'loop' : 'once'}`,
-          { fontSize: '12px', color: '#aaa' }).setOrigin(0.5, 0);
+        this.add.text(x, y + 4, `${anim.key.slice(name.length + 1)}\n${anim.frames.length}f ${anim.repeat === -1 ? 'loop' : 'once'}`,
+          { fontSize: '12px', color: '#aaa', align: 'center' }).setOrigin(0.5, 0);
         window.pixelforgeReport.push({ key: anim.key, frames: anim.frames.length, repeat: anim.repeat,
           originX: s.originX, originY: s.originY });
       });
-      // a sparring row per attack (animations with active frames)
       const data = this.cache.json.get(name);
-      for (const anim of anims) {
-        const tag = data.meta.frameTags.find((t) => t.name === anim.key);
-        const hasActive = Object.values(data.frames).slice(tag.from, tag.to + 1).some((f) => f.pixelforge?.hit?.length);
-        if (!hasActive) continue;
-        y += fh + 40;
-        lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
-        const ax = 40 + fw;
-        const attacker = this.add.sprite(ax, y, name).setScale(SCALE).play({ key: anim.key, repeat: -1 });
-        const idle = anims.find((a) => a.key.endsWith('_idle'))?.key ?? anims[0].key;
-        const dummies = { front: 30, far: 56, behind: -24 }; // distance from attacker, in sprite pixels
-        const targets = Object.entries(dummies).map(([label, d]) => {
-          const t = this.add.sprite(ax + d * SCALE, y, name).setScale(SCALE).setFlipX(d > 0).play(idle).setAlpha(0.75);
-          t.label = label;
-          window.pixelforgeHits[`${anim.key}:${label}`] = 0;
-          const txt = this.add.text(t.x, y + 4, `${label}: 0`, { fontSize: '12px', color: '#aaa' }).setOrigin(0.5, 0);
-          t.counter = txt;
-          return t;
-        });
+      const centered = data.meta.pixelforge?.anchor === 'center';
+      const idleFor = (dir) => (anims.find((a) => a.key.endsWith(`_idle_${dir}`)) ??
+        anims.find((a) => a.key.endsWith('_idle')) ?? anims[0]).key;
+      const sparHits = (attacker, key, targets) => {
         enablePixelforgeHits(this, attacker, targets, (t) => {
-          const k = `${anim.key}:${t.label}`;
+          const k = `${key}:${t.label}`;
           window.pixelforgeHits[k] += 1;
           t.counter.setText(`${t.label}: ${window.pixelforgeHits[k]}`).setColor('#f0283c');
           t.setTintFill(0xffffff);
           this.time.delayedCall(80, () => t.clearTint());
         });
         let swings = 0;
-        attacker.on('animationrepeat', () => { swings += 1; window.pixelforgeHits[`${anim.key}:swings`] = swings; });
-        this.add.text(8, y - fh - 16, `sparring: ${anim.key} (repeating)`, { fontSize: '14px', color: '#ddd' });
+        attacker.on('animationrepeat', () => { swings += 1; window.pixelforgeHits[`${key}:swings`] = swings; });
+      };
+
+      // overhead (centre-anchored) sprites are drawn facing east and rotated in the engine
+      if (centered) {
+        const walk = (anims.find((a) => a.key.endsWith('_walk')) ?? anims[0]).key;
+        const step = 160;
+        y += fh / 2 + 40;
+        this.add.text(8, y - fh / 2 - 16, `${name}: rotated by the engine (walk at 0°…270° in 45° steps, last one spinning)`,
+          { fontSize: '14px', color: '#ddd' });
+        for (let i = 0; i < 8; i++) {
+          const s = this.add.sprite(20 + fw / 2 + i * step, y, name).setScale(SCALE).play(walk);
+          if (i < 7) s.setRotation(i * Math.PI / 4); else s.spin = true;
+          this.shown.push(s);
+        }
+        y += fh / 2;
+      }
+
+      // a sparring row per attack (animations with active frames). Top-down attacks named
+      // *_down / *_up get their dummies below / above the attacker, facing it. Overhead attacks
+      // are sparred at two rotations, one diagonal, to exercise rotated boxes.
+      for (const anim of anims) {
+        const tag = data.meta.frameTags.find((t) => t.name === anim.key);
+        const hasActive = Object.values(data.frames).slice(tag.from, tag.to + 1).some((f) => f.pixelforge?.hit?.length);
+        if (!hasActive) continue;
+        if (centered) {
+          const R = 62 * SCALE;
+          y += 56 + R;
+          this.add.text(8, y - R - 20, `sparring: ${anim.key} (repeating), rotated 0° and 135°`,
+            { fontSize: '14px', color: '#ddd' });
+          [0, 135].forEach((deg, ci) => {
+            const th = deg * Math.PI / 180, cx = 40 + R + ci * (2 * R + 60), cy = y;
+            const key = `${anim.key}@${deg}`;
+            const attacker = this.add.sprite(cx, cy, name).setScale(SCALE).setRotation(th).setDepth(2)
+              .play({ key: anim.key, repeat: -1 });
+            const targets = Object.entries({ front: 28, far: 52, behind: -30 }).map(([label, d]) => {
+              const tx = cx + Math.cos(th) * d * SCALE, ty = cy + Math.sin(th) * d * SCALE;
+              const t = this.add.sprite(tx, ty, name).setScale(SCALE).setAlpha(0.75)
+                .setRotation(Math.atan2(cy - ty, cx - tx)).play(idleFor('side'));
+              t.label = label;
+              window.pixelforgeHits[`${key}:${label}`] = 0;
+              t.counter = this.add.text(tx, ty + 22 * SCALE, `${label}: 0`, { fontSize: '12px', color: '#aaa' })
+                .setOrigin(0.5, 0).setDepth(1e6);
+              return t;
+            });
+            sparHits(attacker, key, targets);
+            this.shown.push(attacker, ...targets);
+          });
+          y += R;
+          continue;
+        }
+        const dir = anim.key.match(/_(down|up)$/)?.[1] ?? 'side';
+        const dummies = { side: { front: 30, far: 56, behind: -24 },   // distance from attacker, sprite pixels
+                          down: { front: 18, far: 46, behind: -34 },
+                          up:   { front: -22, far: -58, behind: 30 } }[dir];
+        const offs = dir === 'side' ? [0] : Object.values(dummies);
+        y += fh + 56 + -Math.min(0, ...offs) * SCALE;
+        lines.lineStyle(1, 0xff00c8, 0.6).lineBetween(0, y, this.scale.width, y);
+        const ax = dir === 'side' ? 40 + fw : 60 + fw;
+        const attacker = this.add.sprite(ax, y, name).setScale(SCALE).setDepth(y).play({ key: anim.key, repeat: -1 });
+        const targets = Object.entries(dummies).map(([label, d]) => {
+          const [tx, ty] = dir === 'side' ? [ax + d * SCALE, y] : [ax, y + d * SCALE];
+          const faceDir = dir === 'side' ? 'side' : (label === 'behind') === (dir === 'down') ? 'down' : 'up';
+          const t = this.add.sprite(tx, ty, name).setScale(SCALE).setDepth(ty).setAlpha(0.75)
+            .setFlipX(dir === 'side' && d > 0).play(idleFor(faceDir));
+          t.label = label;
+          window.pixelforgeHits[`${anim.key}:${label}`] = 0;
+          const [lx, ly, ox] = dir === 'side' ? [tx, ty + 4, 0.5] : [tx + fw / 4, ty - 16, 0];
+          t.counter = this.add.text(lx, ly, `${label}: 0`, { fontSize: '12px', color: '#aaa' }).setOrigin(ox, 0).setDepth(1e6);
+          return t;
+        });
+        const below = Math.max(0, ...offs) * SCALE;
+        sparHits(attacker, anim.key, targets);
+        this.add.text(8, y - fh - 16 + Math.min(0, ...offs) * SCALE, `sparring: ${anim.key} (repeating)`,
+          { fontSize: '14px', color: '#ddd' });
         this.shown.push(attacker, ...targets);
+        y += below;
       }
     }
     this.scale.resize(this.scale.width, y + 40);
   }
-  update() {
+  update(time, delta) {
+    for (const s of this.shown) if (s.spin) s.rotation += delta * 0.0015;
     this.debug.clear();
     if (document.getElementById('boxes').checked) drawPixelforgeBoxes(this.debug, this.shown);
   }

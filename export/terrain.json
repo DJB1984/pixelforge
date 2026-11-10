@@ -1,0 +1,578 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "terrain",
+  "image": "terrain.png",
+  "imagewidth": 135,
+  "imageheight": 50,
+  "tilewidth": 16,
+  "tileheight": 16,
+  "margin": 0,
+  "spacing": 1,
+  "columns": 8,
+  "tilecount": 20,
+  "tiles": [
+    {
+      "id": 0,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "grass"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "grass_tuft"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "flowers"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "dirt"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "dirt_n"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "dirt_s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "water"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "liquid",
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "animation": [
+        {
+          "tileid": 6,
+          "duration": 250
+        },
+        {
+          "tileid": 11,
+          "duration": 250
+        },
+        {
+          "tileid": 12,
+          "duration": 250
+        },
+        {
+          "tileid": 13,
+          "duration": 250
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "water_n"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "liquid",
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "animation": [
+        {
+          "tileid": 7,
+          "duration": 250
+        },
+        {
+          "tileid": 14,
+          "duration": 250
+        },
+        {
+          "tileid": 15,
+          "duration": 250
+        },
+        {
+          "tileid": 16,
+          "duration": 250
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "water_s"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "liquid",
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "animation": [
+        {
+          "tileid": 8,
+          "duration": 250
+        },
+        {
+          "tileid": 17,
+          "duration": 250
+        },
+        {
+          "tileid": 18,
+          "duration": 250
+        },
+        {
+          "tileid": 19,
+          "duration": 250
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "bridge"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "wall"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "pixelforge": {
+    "tileset": "terrain",
+    "names": [
+      "grass",
+      "grass_tuft",
+      "flowers",
+      "dirt",
+      "dirt_n",
+      "dirt_s",
+      "water",
+      "water_n",
+      "water_s",
+      "bridge",
+      "wall"
+    ],
+    "properties": [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "collides": true,
+        "liquid": true
+      },
+      {
+        "collides": true,
+        "liquid": true
+      },
+      {
+        "collides": true,
+        "liquid": true
+      },
+      {},
+      {
+        "collides": true
+      }
+    ],
+    "animations": {
+      "6": [
+        [
+          6,
+          250
+        ],
+        [
+          11,
+          250
+        ],
+        [
+          12,
+          250
+        ],
+        [
+          13,
+          250
+        ]
+      ],
+      "7": [
+        [
+          7,
+          250
+        ],
+        [
+          14,
+          250
+        ],
+        [
+          15,
+          250
+        ],
+        [
+          16,
+          250
+        ]
+      ],
+      "8": [
+        [
+          8,
+          250
+        ],
+        [
+          17,
+          250
+        ],
+        [
+          18,
+          250
+        ],
+        [
+          19,
+          250
+        ]
+      ]
+    },
+    "sample": [
+      [
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        9,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7
+      ],
+      [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        9,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ],
+      [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        9,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10
+      ]
+    ]
+  }
+}

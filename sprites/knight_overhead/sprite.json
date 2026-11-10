@@ -1,0 +1,240 @@
+{
+  "name": "knight_overhead",
+  "class": "overhead",
+  "palette": {
+    "k": "outline",
+    "d": "dark_slate",
+    "m": "slate",
+    "l": "gray",
+    "h": "light_gray",
+    "w": "white",
+    "r": "crimson",
+    "R": "red",
+    "s": "skin",
+    "S": "skin_shadow",
+    "b": "dark_brown",
+    "n": "brown",
+    "y": "amber",
+    "B": "deep_brown",
+    "c": "plum"
+  },
+  "roles": {
+    "*smear_trail": "none",
+    "*sword*": "hit",
+    "*smear": "hit",
+    "cape": "none",
+    "plume*": "none"
+  },
+  "hit_pad": 1,
+  "hurt_pad": -1,
+  "animations": {
+    "idle": {
+      "fps": 4,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "cape",
+            "plume_tail",
+            "torso",
+            "pauldron_n",
+            "pauldron_s",
+            "arm_n",
+            "arm_s",
+            "sword",
+            "helmet"
+          ],
+          "duration": 450
+        },
+        {
+          "layers": [
+            "cape",
+            "plume_tail_sway",
+            "torso",
+            {
+              "from": "pauldron_n",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "pauldron_s",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "arm_n",
+            "arm_s",
+            "sword",
+            "helmet"
+          ],
+          "duration": 450
+        }
+      ]
+    },
+    "walk": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "boot_n_fwd",
+            "cape",
+            "plume_tail",
+            "torso",
+            "pauldron_n_back",
+            "pauldron_s_fwd",
+            {
+              "from": "arm_n",
+              "offset": [
+                -1,
+                0
+              ]
+            },
+            {
+              "from": "arm_s",
+              "offset": [
+                1,
+                0
+              ]
+            },
+            {
+              "from": "sword",
+              "offset": [
+                1,
+                0
+              ]
+            },
+            "helmet"
+          ]
+        },
+        {
+          "layers": [
+            "cape",
+            "plume_tail_sway",
+            "torso",
+            "pauldron_n",
+            "pauldron_s",
+            "arm_n",
+            "arm_s",
+            "sword",
+            "helmet"
+          ]
+        },
+        {
+          "layers": [
+            "boot_s_fwd",
+            "cape",
+            "plume_tail",
+            "torso",
+            "pauldron_n_fwd",
+            "pauldron_s_back",
+            {
+              "from": "arm_n",
+              "offset": [
+                1,
+                0
+              ]
+            },
+            {
+              "from": "arm_s",
+              "offset": [
+                -1,
+                0
+              ]
+            },
+            {
+              "from": "sword",
+              "offset": [
+                -1,
+                0
+              ]
+            },
+            "helmet"
+          ]
+        },
+        {
+          "layers": [
+            "cape",
+            "plume_tail_sway",
+            "torso",
+            "pauldron_n",
+            "pauldron_s",
+            "arm_n",
+            "arm_s",
+            "sword",
+            "helmet"
+          ]
+        }
+      ]
+    },
+    "attack": {
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            "cape",
+            "plume_tail",
+            "torso",
+            "pauldron_n_fwd",
+            "pauldron_s_back",
+            "arm_n",
+            "sword_windup",
+            "arm_s_windup",
+            "helmet"
+          ],
+          "duration": 220
+        },
+        {
+          "layers": [
+            "smear_trail",
+            "smear",
+            "cape",
+            "plume_tail_sway",
+            "torso",
+            "pauldron_n_back",
+            "pauldron_s_fwd",
+            "arm_n",
+            "arm_s_strike",
+            "sword_strike",
+            "helmet"
+          ],
+          "duration": 60,
+          "active": true
+        },
+        {
+          "layers": [
+            "cape",
+            "plume_tail_sway",
+            "torso",
+            "pauldron_n_back",
+            "pauldron_s_fwd",
+            "arm_n",
+            "arm_s_follow",
+            "sword_follow",
+            "helmet"
+          ],
+          "duration": 140,
+          "active": true
+        },
+        {
+          "layers": [
+            "cape",
+            "plume_tail",
+            "torso",
+            "pauldron_n",
+            "pauldron_s",
+            "arm_n",
+            "arm_s",
+            "sword",
+            "helmet"
+          ],
+          "duration": 200
+        }
+      ]
+    }
+  }
+}
