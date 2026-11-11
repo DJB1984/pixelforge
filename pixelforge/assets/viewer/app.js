@@ -734,7 +734,10 @@ let stage = null;   // { draw, surface: { w, h, wrap, mapCell }, step, canStep }
 function spritePage(page, a) {
   const r = S.route;
   if (r.sub === '~game' && hasGame(a)) {
-    page.innerHTML = gameShell(a.type === 'prop' ? `tilemap.html?prop=${enc(a.name)}&embed=1` : `phaser.html?sprite=${enc(a.name)}&embed=1`);
+    // props walk the tilemap; characters that jump get the platformer playground; the rest spar with dummies
+    const jumps = a.anims.some((x) => /^jump(_|$)/.test(x.name));
+    const src = a.type === 'prop' ? `tilemap.html?prop=${enc(a.name)}` : `${jumps ? 'platformer' : 'phaser'}.html?sprite=${enc(a.name)}`;
+    page.innerHTML = gameShell(`${src}&embed=1`);
     renderSpriteTabs(a, null);
     stage = null;
     return;

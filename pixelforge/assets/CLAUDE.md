@@ -161,7 +161,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `gallery` | `export/gallery.html`: one self-contained page with every character playing every animation |
 | `upgrade [--dry-run]` | after the pixelforge repo is updated (`git pull`): refresh this guide, add missing scaffolding, re-export. If it writes `CLAUDE.pixelforge-new.md`, merge that into CLAUDE.md and delete it |
 | `--version` | installed pixelforge version (`pixelforge.json` records the version this game was last upgraded to) |
-| `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every sprite and tileset, built live from `sprites/` (no export needed), where the developer critiques the art. Each asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/tilemap.html` walkable sample map) |
+| `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every sprite and tileset, built live from `sprites/` (no export needed), where the developer critiques the art. Each asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/platformer.html` playable side-view for characters with `jump*` animations, `/viewer/tilemap.html` walkable sample map) |
 | `critiques [--all]` / `critiques watch [--once]` / `critiques show ID` / `critiques done ID -m "..."` | the developer's critiques: list them, wait for new ones, picture one (`previews/critique_ID.png`), mark one fixed |
 
 ## The authoring loop (do this every time)

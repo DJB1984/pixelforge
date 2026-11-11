@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pixelforge platformer test</title>
+<style>
+  body { margin: 0; background: #141518; color: #a3a6ad; font: 13px Inter, system-ui, sans-serif; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  select { background: #1c1d21; color: #ededef; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 3px 6px; font: inherit; }
+  kbd { font: 11px ui-monospace, Consolas, monospace; color: #ededef; background: #1c1d21; border: 1px solid rgba(255,255,255,.12); border-radius: 4px; padding: 1px 5px; }
+  #info { font: 12px ui-monospace, Consolas, monospace; color: #82858d; min-height: 1.4em; }
+  .embed .pick { display: none; }
+  p { margin: 12px 16px; }
+  code { color: #ededef; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <label class="pick">Character <select id="sprite"></select></label>
+  <label><input type="checkbox" id="boxes"> Boxes</label>
+  <span><kbd>←</kbd><kbd>→</kbd> walk · hold <kbd>Shift</kbd> run · <kbd>Space</kbd> jump (hold for higher) · <kbd>X</kbd> attack</span>
+  <span id="info"></span>
+</div>
+<div id="game"></div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script type="module">
+import { loadPixelforge, createPixelforgeAnims, pixelforgeBody, drawPixelforgeBoxes } from '../phaser/pixelforge.js';
+
+// A side-view playground: walk, run and jump a character around a few platforms, with the
+// animations picked from what it's moving like. Sheets are `pixelforge serve`'s live builds.
+const BASE = '../live/';
+const index = await (await fetch(`${BASE}index.json`, { cache: 'no-store' })).json();
+const params = new URLSearchParams(location.search);
+if (params.has('embed')) document.body.classList.add('embed');
+const $ = (id) => document.getElementById(id);
+const ZOOM = 3, WORLD_W = 1200, WORLD_H = 270, GROUND = 230;
+const WALK = 70, RUN = 135, JUMP = 330, GRAVITY = 900;
+// [x, y, width, height] in world pixels
+const SOLIDS = [[0, GROUND, 520, 40], [580, GROUND, 620, 40], [190, 186, 90, 10], [330, 150, 70, 10],
+                [455, 112, 60, 10], [640, 180, 110, 10], [800, 140, 70, 10], [930, 196, 40, 34], [1010, 166, 40, 64]];
+
+class PlatformScene extends Phaser.Scene {
+  preload() {
+    for (const name of index.sprites) loadPixelforge(this, name, BASE);
+  }
+  create() {
+    // side-view characters: not top-down (no walk_down) and not overhead (centre-anchored)
+    const sideView = index.sprites.filter((n) => {
+      const meta = this.cache.json.get(n).meta;
+      return meta.pixelforge?.anchor !== 'center' && !meta.frameTags.some((t) => t.name === `${n}_walk_down`);
+    });
+    const name = sideView.includes(params.get('sprite')) ? params.get('sprite') : sideView[0];
+    $('sprite').innerHTML = sideView.map((n) => `<option ${n === name ? 'selected' : ''}>${n}</option>`).join('');
+    $('sprite').onchange = () => { params.set('sprite', $('sprite').value); location.search = params; };
+    if (!name) return;
+
+    this.cameras.main.setBackgroundColor('#262b44').setZoom(ZOOM).setBounds(0, 0, WORLD_W, WORLD_H);
+    this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + 200);
+    this.physics.world.gravity.y = GRAVITY;
+    const g = this.add.graphics();
+    const solids = this.physics.add.staticGroup();
+    for (const [x, y, w, h] of SOLIDS) {
+      g.fillStyle(0x181425).fillRect(x, y, w, h);
+      g.fillStyle(0x733e39).fillRect(x + 1, y + 1, w - 2, h - 2);
+      g.fillStyle(0x3e8948).fillRect(x + 1, y + 1, w - 2, 3);
+      g.fillStyle(0x63c74d).fillRect(x + 1, y + 1, w - 2, 1);
+      solids.add(this.add.zone(x + w / 2, y + h / 2, w, h));
+    }
+
+    const anims = createPixelforgeAnims(this, name).map((a) => a.key);
+    const key = (...actions) => actions.map((a) => `${name}_${a}`).find((k) => anims.includes(k));
+    this.anim = {
+      idle: key('idle') ?? anims[0], walk: key('walk', 'idle') ?? anims[0], run: key('run', 'walk', 'idle') ?? anims[0],
+      rise: key('jump_rise', 'jump', 'idle') ?? anims[0], fall: key('jump_fall', 'jump_rise', 'jump', 'idle') ?? anims[0],
+      land: key('jump_land'), attack: key('attack'),
+    };
+
+    this.hero = this.physics.add.sprite(60, GROUND, name).play(this.anim.idle);
+    const b = pixelforgeBody(this, name);
+    this.hero.body.setSize(b.width, b.height).setOffset(b.x, b.y);
+    this.hero.setCollideWorldBounds(true);
+    this.physics.add.collider(this.hero, solids);
+    this.cameras.main.startFollow(this.hero, true, 0.15, 0.15);
+    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,A,D,W,SPACE,SHIFT,X,J');
+    this.debug = this.add.graphics().setDepth(10);
+    this.lastGround = 0;
+    this.jumpQueued = -1e9;
+    this.busy = null;   // a one-shot animation (land, attack) that plays out unless interrupted
+    this.hero.on('animationcomplete', (a) => { if (a.key === this.busy) this.busy = null; });
+    window.pixelforgePlayer = this.hero;
+    this.scale.resize(Math.min(window.innerWidth, 960), Math.max(Math.min(window.innerHeight - 60, 540), 300));
+  }
+  update(time) {
+    if (!this.hero) return;
+    const k = this.keys, hero = this.hero, body = hero.body;
+    const dir = (k.RIGHT.isDown || k.D.isDown) - (k.LEFT.isDown || k.A.isDown);
+    const running = k.SHIFT.isDown;
+    const onGround = body.blocked.down;
+    const jumpDown = k.SPACE.isDown || k.UP.isDown || k.W.isDown;
+
+    if (Phaser.Input.Keyboard.JustDown(k.SPACE) || Phaser.Input.Keyboard.JustDown(k.UP) || Phaser.Input.Keyboard.JustDown(k.W)) {
+      this.jumpQueued = time;
+    }
+    if (onGround) this.lastGround = time;
+    // forgiving jumps: a press just before landing, or just after walking off a ledge, still counts
+    if (time - this.jumpQueued < 120 && time - this.lastGround < 90) {
+      body.setVelocityY(-JUMP);
+      this.jumpQueued = -1e9;
+      this.lastGround = -1e9;
+      this.busy = null;
+    }
+    if (!jumpDown && body.velocity.y < -JUMP / 3) body.setVelocityY(-JUMP / 3);   // short hop on release
+
+    const attacking = this.busy && this.busy === this.anim.attack;
+    body.setVelocityX(attacking && onGround ? 0 : dir * (running ? RUN : WALK));
+    if (dir) hero.setFlipX(dir < 0);
+
+    if ((Phaser.Input.Keyboard.JustDown(k.X) || Phaser.Input.Keyboard.JustDown(k.J)) && this.anim.attack && !attacking) {
+      this.busy = this.anim.attack;
+      hero.play(this.anim.attack);
+    }
+    if (!onGround) {
+      if (!attacking) { this.busy = null; hero.play(body.velocity.y < 0 ? this.anim.rise : this.anim.fall, true); }
+    } else if (this.wasAirborne && this.anim.land && !attacking) {
+      this.busy = this.anim.land;
+      hero.play(this.anim.land);
+    } else if (this.busy && dir && this.busy === this.anim.land) {
+      this.busy = null;   // moving cancels the landing pose
+    }
+    if (onGround && !this.busy) hero.play(dir ? (running ? this.anim.run : this.anim.walk) : this.anim.idle, true);
+    this.wasAirborne = !onGround;
+
+    // fell off the gap: back to the start
+    if (hero.y > WORLD_H + 60) { hero.setPosition(60, GROUND); body.setVelocity(0, 0); }
+
+    this.debug.clear();
+    if ($('boxes').checked) {
+      this.debug.lineStyle(1, 0xfac828, 1).strokeRectShape(body);
+      drawPixelforgeBoxes(this.debug, [hero]);
+    }
+    $('info').textContent = `${hero.anims.currentAnim?.key ?? ''}  ·  speed ${Math.round(Math.abs(body.velocity.x))}`;
+  }
+}
+
+window.pixelforgeGame = new Phaser.Game({
+  type: Phaser.AUTO, parent: 'game', pixelArt: true, backgroundColor: '#141518',
+  width: 960, height: 540, physics: { default: 'arcade' }, scene: PlatformScene,
+});
+</script>
+</body>
+</html>
