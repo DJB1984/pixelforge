@@ -1,0 +1,471 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "house_tiles",
+  "image": "house_tiles.png",
+  "imagewidth": 67,
+  "imageheight": 84,
+  "tilewidth": 16,
+  "tileheight": 16,
+  "margin": 0,
+  "spacing": 1,
+  "columns": 4,
+  "tilecount": 20,
+  "tiles": [
+    {
+      "id": 0,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r0c0"
+        },
+        {
+          "name": "above",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r0c1"
+        },
+        {
+          "name": "above",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r0c2"
+        },
+        {
+          "name": "above",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r0c3"
+        },
+        {
+          "name": "above",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r1c0"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r1c1"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r1c2"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r1c3"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r2c0"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r2c1"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r2c2"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r2c3"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r3c0"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r3c1"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r3c2"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r3c3"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r4c0"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r4c1"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r4c2"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "value": "house_r4c3"
+        },
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "pixelforge": {
+    "tileset": "house_tiles",
+    "names": [
+      "house_r0c0",
+      "house_r0c1",
+      "house_r0c2",
+      "house_r0c3",
+      "house_r1c0",
+      "house_r1c1",
+      "house_r1c2",
+      "house_r1c3",
+      "house_r2c0",
+      "house_r2c1",
+      "house_r2c2",
+      "house_r2c3",
+      "house_r3c0",
+      "house_r3c1",
+      "house_r3c2",
+      "house_r3c3",
+      "house_r4c0",
+      "house_r4c1",
+      "house_r4c2",
+      "house_r4c3"
+    ],
+    "properties": [
+      {
+        "above": true
+      },
+      {
+        "above": true
+      },
+      {
+        "above": true
+      },
+      {
+        "above": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      },
+      {
+        "collides": true
+      }
+    ],
+    "animations": {},
+    "sample": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        4,
+        5,
+        6,
+        7
+      ],
+      [
+        8,
+        9,
+        10,
+        11
+      ],
+      [
+        12,
+        13,
+        14,
+        15
+      ],
+      [
+        16,
+        17,
+        18,
+        19
+      ]
+    ],
+    "stamps": {
+      "house": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          4,
+          5,
+          6,
+          7
+        ],
+        [
+          8,
+          9,
+          10,
+          11
+        ],
+        [
+          12,
+          13,
+          14,
+          15
+        ],
+        [
+          16,
+          17,
+          18,
+          19
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "frames": {
+    "0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 80
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            0,
+            0,
+            64,
+            80
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "1": {
+      "frame": {
+        "x": 0,
+        "y": 81,
+        "w": 64,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 80
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            0,
+            0,
+            64,
+            80
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "2": {
+      "frame": {
+        "x": 0,
+        "y": 162,
+        "w": 64,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 80
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            0,
+            0,
+            64,
+            80
+          ]
+        ],
+        "hit": []
+      }
+    }
+  },
+  "meta": {
+    "app": "pixelforge",
+    "version": "1.0",
+    "image": "house.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 64,
+      "h": 242
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "house_closed",
+        "from": 0,
+        "to": 0,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "house_open",
+        "from": 1,
+        "to": 1,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "house_lit",
+        "from": 2,
+        "to": 2,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [],
+    "slices": [],
+    "pixelforge": {
+      "sprite": "house",
+      "kind": "prop",
+      "view": "topdown",
+      "class": null,
+      "origin": [
+        32,
+        80
+      ],
+      "anchor": "feet",
+      "body": {
+        "x": 2,
+        "y": 16,
+        "w": 60,
+        "h": 64
+      },
+      "animations": {
+        "house_closed": {
+          "anim": "closed",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        },
+        "house_open": {
+          "anim": "open",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        },
+        "house_lit": {
+          "anim": "lit",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        }
+      },
+      "prop": {
+        "layer": "world",
+        "scroll": 1.0,
+        "solid": true,
+        "footprint": [
+          2,
+          16,
+          60,
+          64
+        ],
+        "ysort": true,
+        "tiles": "house_tiles"
+      }
+    }
+  }
+}

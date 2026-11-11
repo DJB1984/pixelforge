@@ -1,0 +1,26 @@
+{
+  "name": "ui",
+  "type": "icons",
+  "size": [16, 16],
+  "columns": 8,
+  "palette": {
+    "k": "outline",
+    "w": "white",
+    "r": "red",
+    "R": "crimson",
+    "y": "yellow",
+    "a": "amber",
+    "g": "light_gray",
+    "s": "sand",
+    "t": "white",
+    "b": "brown",
+    "B": "dark_brown"
+  },
+  "icons": [
+    "heart",
+    "coin",
+    "potion",
+    {"name": "heart_empty", "from": "heart", "replace": {"r": "B", "R": "B", "w": "b"}},
+    {"name": "panel", "from": "panel", "nine": [4, 4, 4, 5]}
+  ]
+}

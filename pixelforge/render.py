@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .grid import TRANSPARENT, Grid
 from .boxes import anim_boxes
-from .model import Sprite
+from .model import Sprite, SpriteError
 
 CHECK_A = (205, 205, 205, 255)
 CHECK_B = (235, 235, 235, 255)
@@ -23,6 +23,13 @@ BODY_COLOR = (250, 200, 40, 255)    # body box (physics)
 HURT_COLOR = (40, 200, 90, 255)     # hurtbox
 HIT_COLOR = (240, 40, 60, 255)      # hitbox
 MARK_COLOR = (44, 232, 245, 255)    # critiqued spot
+SLICE_COLOR = (90, 110, 255, 150)   # where a sliced prop is cut into tiles
+MISSING_COLOR = (255, 0, 255, 255)  # a character the font has no glyph for
+
+
+def auto_scale(w: int, h: int, most: int = 16, budget: int = 1400) -> int:
+    """Zoom that keeps a big canvas (a building) to a readable preview size."""
+    return max(2, min(most, budget // max(w, h, 1)))
 
 
 def font(size: int) -> ImageFont.ImageFont:
@@ -65,10 +72,11 @@ def zoom(img: Image.Image, scale: int) -> Image.Image:
 def preview(sprite: Sprite, grid: Grid, scale: int = 16, title: str = "",
             prev: Grid | None = None, nxt: Grid | None = None,
             gridlines: bool = True, rulers: bool = True, show_origin: bool = True,
-            boxes: dict | None = None, marks: list | None = None) -> Image.Image:
+            boxes: dict | None = None, marks: list | None = None,
+            slices: tuple[int, int] | None = None) -> Image.Image:
     """Zoomed frame with pixel grid, x/y rulers, origin marker, optional onion skins,
     optional body box / hurtbox / hitbox outlines, optional [x, y, w, h] marks (e.g. a critiqued spot),
-    and real-size (1x, 2x) thumbnails."""
+    optional tile cut lines (a sliced prop's `slice`), and real-size (1x, 2x) thumbnails."""
     w, h = grid.width * scale, grid.height * scale
     ruler = 22 if rulers else 0
     title_h = 22 if title else 0
@@ -89,6 +97,12 @@ def preview(sprite: Sprite, grid: Grid, scale: int = 16, title: str = "",
             d.line([(i * scale, 0), (i * scale, h)], fill=GRID_MAJOR if i % 8 == 0 else GRID_MINOR)
         for j in range(grid.height + 1):
             d.line([(0, j * scale), (w, j * scale)], fill=GRID_MAJOR if j % 8 == 0 else GRID_MINOR)
+    if slices:
+        tw, th = slices
+        for i in range(0, grid.width + 1, tw):
+            d.line([(i * scale, 0), (i * scale, h)], fill=SLICE_COLOR, width=max(1, scale // 8))
+        for j in range(0, grid.height + 1, th):
+            d.line([(0, j * scale), (w, j * scale)], fill=SLICE_COLOR, width=max(1, scale // 8))
     if show_origin:
         ox, oy = sprite.origin
         cx, cy = ox * scale, oy * scale
@@ -258,7 +272,171 @@ def tileset_preview(sprite: Sprite, names: list[str] | None = None, scale: int =
         d.text((pad, y0 + 4), "sample map (sprite.json \"sample\")", fill=LABEL_FG, font=f)
         img.alpha_composite(smap, (pad, y0 + 24))
         img.alpha_composite(map_image(sprite, sample_rows), (pad * 2 + smap.width, y0 + 24))
-    return img
+    extra = []
+    if sample and (st := stamps_preview(sprite, max(1, scale // 2))):
+        extra.append(("stamps (sprite.json \"stamps\": stampPixelforgeTiles places these)", st))
+    if pn := panels_preview(sprite, max(2, scale - 1)):
+        extra.append(("nine-slice panels, stretched", pn))
+    return stack(extra, img) if extra else img
+
+
+def stack(sections: list[tuple[str, Image.Image]], base: Image.Image | None = None, pad: int = 10) -> Image.Image:
+    """Append titled image sections under `base` (or under nothing)."""
+    parts = ([("", base)] if base is not None else []) + sections
+    width = max(im.width + (0 if not t else pad * 2) for t, im in parts)
+    height = sum(im.height + (24 + pad if t else 0) for t, im in parts) + pad
+    out = Image.new("RGBA", (width, height), LABEL_BG)
+    d = ImageDraw.Draw(out)
+    y = 0
+    for title, im in parts:
+        if title:
+            d.text((pad, y + 6), title, fill=LABEL_FG, font=font(13))
+            out.alpha_composite(im, (pad, y + 24))
+            y += im.height + 24 + pad
+        else:
+            out.alpha_composite(im, (0, y))
+            y += im.height
+    return out
+
+
+def stamps_preview(sprite: Sprite, scale: int = 2) -> Image.Image | None:
+    """Every tileset stamp drawn side by side (zoomed), each labelled."""
+    if not sprite.stamps:
+        return None
+    imgs = []
+    for name in sprite.stamps:
+        try:
+            m = map_image(sprite, sprite.stamp_map(name))
+        except SpriteError:   # `check` reports it; draw the others
+            continue
+        cell = checkerboard(m.width * scale, m.height * scale, scale * 4)
+        cell.alpha_composite(zoom(m, scale))
+        imgs.append((name, cell))
+    if not imgs:
+        return None
+    pad = 12
+    out = Image.new("RGBA", (sum(i.width + pad for _, i in imgs) + pad, max(i.height for _, i in imgs) + 22 + pad), LABEL_BG)
+    d = ImageDraw.Draw(out)
+    x = pad
+    for name, im in imgs:
+        d.text((x, 2), name, fill=LABEL_FG, font=font(11))
+        out.alpha_composite(im, (x, 18))
+        x += im.width + pad
+    return out
+
+
+def nine_slice(img: Image.Image, nine: list[int], w: int, h: int) -> Image.Image:
+    """Stretch an image to w x h keeping its border strips (left, right, top, bottom px) unscaled,
+    the way Phaser's NineSlice draws a panel."""
+    l, r, t, b = nine
+    sw, sh = img.size
+    xs, ys = [(0, l, 0, l), (l, sw - r, l, w - r), (sw - r, sw, w - r, w)], \
+             [(0, t, 0, t), (t, sh - b, t, h - b), (sh - b, sh, h - b, h)]
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    for sx0, sx1, dx0, dx1 in xs:
+        for sy0, sy1, dy0, dy1 in ys:
+            if sx1 > sx0 and sy1 > sy0 and dx1 > dx0 and dy1 > dy0:
+                out.alpha_composite(img.crop((sx0, sy0, sx1, sy1)).resize((dx1 - dx0, dy1 - dy0), Image.NEAREST),
+                                    (dx0, dy0))
+    return out
+
+
+def panels_preview(sprite: Sprite, scale: int = 3) -> Image.Image | None:
+    """Each nine-slice icon stretched to three sizes: check that its corners and edges hold up."""
+    items = [(n, m["nine"]) for n, m in sprite.item_meta.items() if "nine" in m and n in sprite.tile_names()]
+    if not items:
+        return None
+    w, h = sprite.width, sprite.height
+    sizes = [(w * 2, h), (w * 4, h * 2), (w * 3, h * 3)]
+    pad = 12
+    rows = []
+    for name, nine in items:
+        src = to_image(sprite, sprite.tile(name))
+        cells = [zoom(nine_slice(src, nine, sw, sh), scale) for sw, sh in sizes]
+        rows.append((name, nine, cells))
+    row_h = max(c.height for _, _, cs in rows for c in cs) + 22
+    width = pad + sum(c.width + pad for c in rows[0][2])
+    out = Image.new("RGBA", (width, pad + len(rows) * (row_h + pad)), LABEL_BG)
+    d = ImageDraw.Draw(out)
+    for k, (name, nine, cells) in enumerate(rows):
+        y = pad + k * (row_h + pad)
+        d.text((pad, y), f"{name}  nine {nine}", fill=LABEL_FG, font=font(11))
+        x = pad
+        for c, (sw, sh) in zip(cells, sizes):
+            out.alpha_composite(c, (x, y + 18))
+            d.text((x + c.width - 4, y + 4), f"{sw}x{sh}", fill=(150, 150, 160, 255), font=font(10), anchor="ra")
+            x += c.width + pad
+    return out
+
+
+def glyph_for(sprite: Sprite, ch: str) -> str | None:
+    """The glyph that draws `ch`: lowercase falls back to the capital when the font has no lowercase."""
+    if ch in sprite.glyph_widths:
+        return ch
+    if ch.upper() in sprite.glyph_widths and not any(c.islower() for c in sprite.glyph_widths):
+        return ch.upper()
+    return None
+
+
+def font_text(sprite: Sprite, text: str) -> Image.Image:
+    """`text` set in a bitmap font at 1x, using each glyph's width + the font's spacing (as Phaser does).
+    Characters with no glyph show as a magenta block."""
+    lines = text.split("\n")
+    widths = []
+    for line in lines:
+        x = 0
+        for ch in line:
+            g = glyph_for(sprite, ch)
+            x += sprite.space_width if ch == " " else (sprite.glyph_widths[g] if g else sprite.width) + sprite.letter_spacing
+        widths.append(x)
+    out = Image.new("RGBA", (max(1, max(widths, default=1)), max(1, sprite.line_height * len(lines))), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    for row, line in enumerate(lines):
+        x, y = 0, row * sprite.line_height
+        for ch in line:
+            if ch == " ":
+                x += sprite.space_width
+                continue
+            g = glyph_for(sprite, ch)
+            if g is None:
+                d.rectangle([x, y, x + sprite.width - 1, y + sprite.height - 1], fill=MISSING_COLOR)
+                x += sprite.width + sprite.letter_spacing
+                continue
+            gw = sprite.glyph_widths[g]
+            out.alpha_composite(to_image(sprite, sprite.tile(g)).crop((0, 0, gw, sprite.height)), (x, y))
+            x += gw + sprite.letter_spacing
+    return out
+
+
+FONT_BGS = [(24, 20, 37, 255), (90, 105, 136, 255)]   # outline-dark and slate: where HUD text usually sits
+FONT_SAMPLES = ["THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", "0123456789 !?.,:;'\"-+=/()%",
+                "HP 42/100   GOLD 1,350   LEVEL 3", "Press START to play"]
+
+
+def font_preview(sprite: Sprite, texts: list[str] | None = None, scale: int = 4) -> Image.Image:
+    """A font's glyph grid (each glyph zoomed, with its width) and sample text at 1x, 2x and zoomed,
+    on dark and light backgrounds."""
+    pad = 10
+    chars = sprite.tile_names()
+    gw, gh = sprite.width * scale, sprite.height * scale
+    per_row = max(1, min(len(chars), 1100 // (gw + pad)))
+    rows = -(-len(chars) // per_row) if chars else 0
+    grid = Image.new("RGBA", (pad + per_row * (gw + pad), pad + rows * (gh + 16 + pad)), LABEL_BG)
+    d = ImageDraw.Draw(grid)
+    for k, ch in enumerate(chars):
+        x0, y0 = pad + (k % per_row) * (gw + pad), pad + (k // per_row) * (gh + 16 + pad)
+        d.text((x0, y0), f"{ch}  w{sprite.glyph_widths[ch]}", fill=LABEL_FG, font=font(10))
+        cell = Image.new("RGBA", (gw, gh), FONT_BGS[1])   # fonts are usually light ink: show them on mid-dark
+        cell.alpha_composite(zoom(to_image(sprite, sprite.tile(ch)), scale))
+        grid.alpha_composite(cell, (x0, y0 + 14))
+    sections = []
+    for text in texts or FONT_SAMPLES:
+        img = font_text(sprite, text)
+        for z, bg in ((1, FONT_BGS[0]), (2, FONT_BGS[0]), (max(3, scale // 2 + 1), FONT_BGS[1])):
+            panel = Image.new("RGBA", (img.width * z + 8, img.height * z + 8), bg)
+            panel.alpha_composite(zoom(img, z), (4, 4))
+            sections.append((f"{z}x  {text}" if z == 1 else f"{z}x", panel))
+    return stack(sections, grid)
 
 
 def palette_swatch(sprite: Sprite, cell: int = 40) -> Image.Image:

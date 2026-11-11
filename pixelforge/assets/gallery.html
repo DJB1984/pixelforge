@@ -217,7 +217,8 @@ function paintTileViews() {
   const z = Math.max(1, Math.round(opts.zoom / 2));
   for (const v of tileViews) {
     const { ts, ctx } = v;
-    const cols = v.rows ? Math.max(...v.rows.map((r) => r.length)) : 3, rows = v.rows ? v.rows.length : 3;
+    const rep = ts.kind && ts.kind !== 'tileset' ? 1 : 3;   // icons and glyphs don't repeat edge to edge
+    const cols = v.rows ? Math.max(...v.rows.map((r) => r.length)) : rep, rows = v.rows ? v.rows.length : rep;
     ctx.canvas.width = cols * ts.w * z; ctx.canvas.height = rows * ts.h * z;
     ctx.imageSmoothingEnabled = false;
     const bg = STAGES[opts.stage];
@@ -236,7 +237,7 @@ function buildTileset(ts) {
   sec.className = 'char';
   sec.id = ts.name;
   sec.innerHTML = `<div class="char-head"><h2>${ts.name}</h2>
-    <span class="meta">tileset · ${ts.w}×${ts.h} px tiles · ${ts.tiles.length} tiles · ${ts.palette.length} colors</span>
+    <span class="meta">${ts.kind ?? 'tileset'} · ${ts.w}×${ts.h} px ${ts.kind === 'font' ? 'cells' : ts.kind === 'icons' ? 'icons' : 'tiles'} · ${ts.tiles.length} ${ts.kind === 'font' ? 'glyphs' : ts.kind === 'icons' ? 'icons' : 'tiles'} · ${ts.palette.length} colors</span>
     <div class="swatches">${ts.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
     <div class="tilegrid"></div>`;
   const grid = sec.querySelector('.tilegrid');
@@ -248,7 +249,7 @@ function buildTileset(ts) {
                    ...Object.entries(t.props).map(([k, v]) => (v === true ? k : `${k}=${v}`))].filter(Boolean).join(' ');
     card.innerHTML = `<canvas></canvas><div class="tile-head"><strong>${t.name}</strong><span class="badge">#${i}</span></div>
       ${props ? `<div class="facts"><code>${props}</code></div>` : ''}`;
-    card.title = `Tile ${i}: ${t.name}, repeated 3×3`;
+    card.title = ts.kind && ts.kind !== 'tileset' ? `${t.name}` : `Tile ${i}: ${t.name}, repeated 3×3`;
     tileViews.push({ ts, index: i, ctx: card.querySelector('canvas').getContext('2d') });
     grid.append(card);
   });
@@ -289,10 +290,15 @@ async function init() {
   const sprites = DATA.sprites, tilesets = DATA.tilesets ?? [];
   const animCount = sprites.reduce((a, s) => a + s.anims.length, 0);
   const frameCount = sprites.reduce((a, s) => a + s.anims.reduce((b, an) => b + an.frames.length, 0), 0);
-  const tileCount = tilesets.reduce((a, t) => a + t.tiles.length, 0);
+  const terrains = tilesets.filter((t) => !t.kind || t.kind === 'tileset'), uiSets = tilesets.filter((t) => t.kind && t.kind !== 'tileset');
+  const tileCount = terrains.reduce((a, t) => a + t.tiles.length, 0);
   $('game').textContent = DATA.game;
-  $('summary').textContent = `${sprites.length} character${sprites.length === 1 ? '' : 's'} · ${animCount} animations · ` +
-    `${frameCount} frames · ` + (tilesets.length ? `${tilesets.length} tileset${tilesets.length === 1 ? '' : 's'} · ${tileCount} tiles · ` : '') +
+  const nChars = sprites.filter((s) => s.kind !== 'prop').length, nProps = sprites.length - nChars;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  $('summary').textContent = `${plural(nChars, 'character')} · ` + (nProps ? `${plural(nProps, 'prop')} · ` : '') +
+    `${animCount} animations · ${frameCount} frames · ` +
+    (terrains.length ? `${plural(terrains.length, 'tileset')} · ${tileCount} tiles · ` : '') +
+    (uiSets.length ? `${plural(uiSets.length, 'UI set')} · ` : '') +
     `exported ${DATA.generated}`;
 
   await Promise.all([...sprites, ...tilesets].map((s) => { s.img = new Image(); s.img.src = s.sheet; return s.img.decode(); }));
@@ -302,7 +308,7 @@ async function init() {
     sec.className = 'char';
     sec.id = s.name;
     sec.innerHTML = `<div class="char-head"><h2>${s.name}</h2>
-      <span class="meta">${s.class ? s.class + ' · ' : ''}${s.w}×${s.h} px canvas · body ${s.body[2]}×${s.body[3]} · ${s.palette.length} colors · ${s.anims.length} animations</span>
+      <span class="meta">${s.prop ? `prop · ${s.prop.layer}${s.prop.solid ? ' · solid' : ''}${s.prop.scroll !== 1 ? ` · scroll ${s.prop.scroll}` : ''} · ` : ''}${s.class ? s.class + ' · ' : ''}${s.w}×${s.h} px canvas · ${s.prop ? 'footprint' : 'body'} ${s.body[2]}×${s.body[3]} · ${s.palette.length} colors · ${s.anims.length} ${s.prop ? 'states' : 'animations'}</span>
       <div class="swatches">${s.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
       <div class="grid"></div>`;
     const grid = sec.querySelector('.grid');
@@ -330,16 +336,32 @@ async function init() {
   if (reduceMotion) $('playall').textContent = 'Play all';
   $('boxes').onchange = () => tiles.forEach(drawTile);
 
-  const first = sprites[0];
+  const chars = sprites.filter((s) => s.kind !== 'prop'), props = sprites.filter((s) => s.kind === 'prop');
+  const first = chars[0];
   $('usage').textContent = [
     `// Phaser 3, with pixelArt: true. Files: export/<name>.png + export/<name>.json + export/pixelforge.js`,
     ...(first ? [
       `import { loadPixelforge, createPixelforgeAnims, enablePixelforgeHits } from './export/pixelforge.js';`,
-      `preload() { ${sprites.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
-      `create()  { ${sprites.map((s) => `createPixelforgeAnims(this, '${s.name}');`).join(' ')}`,
+      `preload() { ${chars.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
+      `create()  { ${chars.map((s) => `createPixelforgeAnims(this, '${s.name}');`).join(' ')}`,
       `            const hero = this.add.sprite(200, 150, '${first.name}').play('${first.name}_${first.anims[0].name}');`,
       `            enablePixelforgeHits(this, hero, () => enemies, (enemy) => enemy.takeDamage(1)); }`] : []),
-    ...tilesets.flatMap((t) => [
+    ...(props.length ? [
+      `// props: states are animations; solid props get a static body from the footprint`,
+      `import { addPixelforgeProp } from './export/pixelforge.js';`,
+      `preload() { ${props.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
+      `create()  { ${props.map((s, i) => `addPixelforgeProp(this, ${40 + i * 60}, 120, '${s.name}');`).join(' ')} }`] : []),
+    ...tilesets.filter((t) => t.kind === 'icons').flatMap((t) => [
+      `// icons ${t.name}: one image per name; nine-slice panels stretch to any size`,
+      `import { loadPixelforgeIcons, addPixelforgePanel } from './export/pixelforge.js';`,
+      `preload() { loadPixelforgeIcons(this, '${t.name}'); }`,
+      `create()  { this.add.image(20, 20, '${t.name}', '${t.tiles[0]?.name ?? 'icon'}'); }`]),
+    ...tilesets.filter((t) => t.kind === 'font').flatMap((t) => [
+      `// font ${t.name}`,
+      `import { loadPixelforgeFont } from './export/pixelforge.js';`,
+      `preload() { loadPixelforgeFont(this, '${t.name}'); }`,
+      `create()  { this.add.bitmapText(8, 8, '${t.name}', 'HELLO'); }`]),
+    ...tilesets.filter((t) => !t.kind || t.kind === 'tileset').flatMap((t) => [
       `// tileset ${t.name}: tile index = position in sprite.json "tiles"`,
       `import { loadPixelforgeTiles, pixelforgeTilemap } from './export/pixelforge.js';`,
       `preload() { loadPixelforgeTiles(this, '${t.name}'); }`,

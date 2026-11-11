@@ -66,3 +66,44 @@ check('water frames over time (in step)', steps, ['11', '22', '33', '11', '11'])
 check('static tiles untouched', grass.index, 0);
 stop();
 check('stop removes the listener', 'update' in listeners, false);
+
+// stamps: a building's tiles, roof (`above`) on the layer drawn over the characters
+import { stampPixelforgeTiles, addPixelforgeProp, pixelforgeDepth, addPixelforgePanel } from '../pixelforge/assets/phaser/pixelforge.js';
+const kit = { pixelforge: { names: ['roof', 'wall', 'door'], properties: [{ above: true }, { collides: true }, {}],
+                            stamps: { hut: [[0, 0], [1, 2], [-1, 1]] } } };
+const kitScene = { cache: { json: { get: () => kit } } };
+const mkLayer = (firstgid) => { const put = []; return { put, scene: kitScene, tileset: [{ image: { key: 'kit' }, firstgid }],
+  putTileAt: (i, x, y) => { const t = { index: i, x, y, properties: {} }; put.push(t); return t; },
+  forEachTile: (fn) => put.forEach(fn), setCollision: () => {} }; };
+const ground = mkLayer(1), over = mkLayer(1);
+stampPixelforgeTiles(ground, 'kit', 'hut', 10, 4, { above: over });
+check('stamp: walls and door on the ground layer', ground.put.map((t) => [t.index, t.x, t.y]), [[2, 10, 5], [3, 11, 5], [2, 11, 6]]);
+check('stamp: roof on the above layer', over.put.map((t) => [t.index, t.x, t.y]), [[1, 10, 4], [1, 11, 4]]);
+let missing = false; try { stampPixelforgeTiles(ground, 'kit', 'castle', 0, 0); } catch { missing = true; }
+check('unknown stamp throws', missing, true);
+
+// props: static body from the footprint, scroll factor and depth from the layer
+const propData = { meta: { pixelforge: { animations: { house_closed: {}, house_open: {} }, body: { x: 0, y: 40, w: 64, h: 40 },
+  prop: { layer: 'world', scroll: 1, solid: true, ysort: true } } } };
+const calls = [];
+const fakeSprite = (x, y) => ({ x, y, body: { setSize(w, h, c) { calls.push(['size', w, h, c]); return this; },
+  setOffset(ox, oy) { calls.push(['offset', ox, oy]); return this; } },
+  play(k) { calls.push(['play', k]); return this; }, setScrollFactor(f) { calls.push(['scroll', f]); return this; },
+  setDepth(d) { calls.push(['depth', d]); return this; } });
+const propScene = { cache: { json: { get: () => propData } }, anims: { exists: () => true },
+  physics: { add: { staticSprite: (x, y) => { calls.push(['static']); return fakeSprite(x, y); } } },
+  add: { sprite: (x, y) => { calls.push(['plain']); return fakeSprite(x, y); } } };
+addPixelforgeProp(propScene, 100, 120, 'house', { state: 'open' });
+check('solid prop: static body sized to the footprint', calls, [['static'], ['play', 'house_open'], ['scroll', 1], ['depth', 120],
+  ['size', 64, 40, false], ['offset', 0, 40]]);
+calls.length = 0;
+addPixelforgeProp(propScene, 0, 0, 'house', { physics: false });
+check('physics: false makes a plain sprite', calls[0], ['plain']);
+check('back props sort by distance', [pixelforgeDepth({ y: 5 }, { layer: 'back', scroll: 0.2 }), pixelforgeDepth({ y: 5 }, { layer: 'back', scroll: 0.6 })], [-9980, -9940]);
+check('front props draw over everything', pixelforgeDepth({ y: 5 }, { layer: 'front', scroll: 1 }), 10000);
+check('side-view world props keep depth 0', pixelforgeDepth({ y: 5 }, { layer: 'world', scroll: 1, ysort: false }), 0);
+
+// nine-slice panels pass the insets through
+const panelScene = { cache: { json: { get: () => ({ meta: { pixelforge: { nine: { panel: [3, 4, 5, 6] } } } }) } },
+  add: { nineslice: (...a) => a } };
+check('panel insets', addPixelforgePanel(panelScene, 1, 2, 'ui', 'panel', 80, 30), [1, 2, 'ui', 'panel', 80, 30, 3, 4, 5, 6]);

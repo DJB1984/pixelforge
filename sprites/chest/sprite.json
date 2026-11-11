@@ -1,0 +1,26 @@
+{
+  "name": "chest",
+  "type": "prop",
+  "view": "topdown",
+  "size": [16, 16],
+  "origin": [8, 16],
+  "footprint": [1, 9, 14, 7],
+  "palette": {
+    "k": "outline",
+    "t": "tan",
+    "b": "brown",
+    "B": "dark_brown",
+    "e": "deep_brown",
+    "a": "amber",
+    "y": "yellow"
+  },
+  "animations": {
+    "closed": {"frames": [{"layers": [{"part": "body", "at": [0, 8]}, {"part": "lid_closed", "at": [0, 4]}]}]},
+    "opening": {"loop": false, "frames": [
+      {"layers": [{"part": "body", "at": [0, 8]}, {"part": "lid_closed", "at": [0, 4]}], "duration": 120},
+      {"layers": [{"part": "body", "at": [0, 8]}, {"part": "gap", "at": [0, 7]}, {"part": "lid_closed", "at": [0, 3]}],
+       "duration": 80},
+      {"layers": [{"part": "body", "at": [0, 8]}, {"part": "lid_open", "at": [0, 0]}], "duration": 200}]},
+    "open": {"frames": [{"layers": [{"part": "body", "at": [0, 8]}, {"part": "lid_open", "at": [0, 0]}]}]}
+  }
+}

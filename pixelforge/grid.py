@@ -118,6 +118,18 @@ class Grid:
                     out.cells[y][x] = c
         return out
 
+    def paste(self, top: "Grid", x: int, y: int) -> "Grid":
+        """Paint a (usually smaller) grid with its top-left corner at (x, y); parts off the edge are cut."""
+        out = self.copy()
+        for ty, row in enumerate(top.cells):
+            for tx, c in enumerate(row):
+                if c != TRANSPARENT:
+                    out.set(x + tx, y + ty, c)
+        return out
+
+    def crop(self, x: int, y: int, w: int, h: int) -> "Grid":
+        return Grid(w, h, [[self.get(x + cx, y + cy) for cx in range(w)] for cy in range(h)])
+
     def replace(self, old: str, new: str) -> "Grid":
         return Grid(self.width, self.height,
                     [[new if c == old else c for c in r] for r in self.cells])

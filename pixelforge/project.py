@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import __version__
-from .model import ASSETS, DEFAULT_CLASSES, MARKER
+from .model import ASSETS, DEFAULT_CLASSES, DEFAULT_RESOLUTION, MARKER, VIEWS
 
 GUIDE_HEADING = "# Sprites for this game (pixelforge)"  # first line of assets/CLAUDE.md
 
@@ -56,6 +56,14 @@ def _scaffold(target: Path, cfg: dict, report: Report, dry_run: bool = False) ->
     if "classes" not in cfg:
         report.changes.append("+ size classes in pixelforge.json")
         cfg["classes"] = DEFAULT_CLASSES
+    if "view" not in cfg:
+        report.changes.append("+ \"view\": \"side\" in pixelforge.json (set \"topdown\" or \"overhead\" if that's "
+                              "your camera)")
+        cfg["view"] = "side"
+    if "resolution" not in cfg:
+        report.changes.append(f"+ \"resolution\": {list(DEFAULT_RESOLUTION)} in pixelforge.json (your game's base "
+                              f"screen size, before scaling)")
+        cfg["resolution"] = list(DEFAULT_RESOLUTION)
     gi = target / ".gitignore"
     if "previews/" not in (gi.read_text(encoding="utf-8") if gi.exists() else ""):
         report.changes.append("+ .gitignore (previews/)")
@@ -64,13 +72,16 @@ def _scaffold(target: Path, cfg: dict, report: Report, dry_run: bool = False) ->
                 f.write("previews/\n")
 
 
-def init_project(target: Path, name: str | None = None) -> Report:
+def init_project(target: Path, name: str | None = None, view: str = "side",
+                 resolution: tuple[int, int] = DEFAULT_RESOLUTION) -> Report:
+    if view not in VIEWS:
+        raise ValueError(f"view {view!r} must be one of {', '.join(VIEWS)}")
     target.mkdir(parents=True, exist_ok=True)
     if (target / MARKER).exists():
         raise FileExistsError(f"{target / MARKER} already exists; this folder is already a pixelforge project "
                               f"(use `pixelforge upgrade` to bring it up to date)")
     report = Report()
-    cfg = {"name": name or target.name, "classes": DEFAULT_CLASSES}
+    cfg = {"name": name or target.name, "view": view, "resolution": list(resolution), "classes": DEFAULT_CLASSES}
     report.changes.append(f"+ {MARKER}")
     _scaffold(target, cfg, report)
     guide = "CLAUDE.md" if not (target / "CLAUDE.md").exists() else "PIXELFORGE.md"

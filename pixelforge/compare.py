@@ -160,7 +160,7 @@ def _frames(s: Sprite | None) -> dict[str, list[tuple[str, Image.Image]]]:
     """{group: [(label, image), ...]}: animations for sprites, one group of tiles for tilesets."""
     if s is None:
         return {}
-    if s.kind == "tileset":
+    if s.tiled:
         return {"tiles": [(n, to_image(s, s.tile(n))) for n in s.tile_names()]}
     return {a: [(f"{a}[{i}]", to_image(s, g)) for i, g in enumerate(s.anim_frames(a))] for a in s.animations}
 

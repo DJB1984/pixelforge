@@ -4,7 +4,19 @@
     "knight_overhead",
     "knight_topdown"
   ],
+  "props": [
+    "chest",
+    "cloud",
+    "house"
+  ],
   "tilesets": [
+    "house_tiles",
     "terrain"
+  ],
+  "icons": [
+    "ui"
+  ],
+  "fonts": [
+    "font"
   ]
 }

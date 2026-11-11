@@ -113,7 +113,7 @@ def clean_target(t: dict) -> dict:
         raise SpriteError(f"no sprite or tileset {name!r}")
     s = Sprite.load(name)
     out: dict = {"asset": name}
-    if s.kind == "tileset":
+    if s.tiled:
         if t.get("map"):
             if not s.sample_map():
                 raise SpriteError(f"{name} has no sample map")
@@ -170,7 +170,7 @@ def details(t: dict) -> list[str]:
     except SpriteError as e:
         return [f"(can't load {t['asset']}: {e})"]
     out = []
-    if s.kind == "tileset":
+    if s.tiled:
         if "tile" in t:
             out.append(f"tile {s.tile_index(t['tile'])} {t['tile']}: {describe_entry(s.tiles[s.tile_index(t['tile'])][1])}")
         elif t.get("map") and "region" in t:
@@ -281,7 +281,7 @@ def render_target(c: dict) -> Path:
     t = c["target"]
     s = Sprite.load(t["asset"])
     region = t.get("region")
-    if s.kind == "tileset":
+    if s.tiled:
         if "tile" in t:
             img = rd.preview(s, s.tile(t["tile"]), scale=16, title=label(t), show_origin=False, marks=[region] if region else None)
         else:
@@ -294,7 +294,7 @@ def render_target(c: dict) -> Path:
     elif "frame" in t:
         a = s.anim(t["anim"])
         g = s.anim_frames(a.name)[t["frame"]]
-        img = rd.preview(s, g, scale=12, title=label(t), marks=[region] if region else None)
+        img = rd.preview(s, g, scale=rd.auto_scale(g.width, g.height, most=12), title=label(t), marks=[region] if region else None)
     else:
         img = rd.sheet(s, [t["anim"]] if "anim" in t else list(s.animations), scale=6)
     out = _state_dir() / f"critique_{c['id']}.png"

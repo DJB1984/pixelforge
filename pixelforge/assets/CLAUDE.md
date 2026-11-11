@@ -6,8 +6,11 @@ This folder is a pixelforge project (`pixelforge.json` marks its root). Sprites 
 ```
 palettes/game.json            shared named colors (Endesga 32). Prefer these names.
 sprites/<name>/sprite.json    size, origin, palette, animations
-sprites/<name>/frames/*.txt   one frame or layer per file: H lines of W chars
+sprites/<name>/frames/*.txt   one frame or layer per file: H lines of W chars (the whole canvas)
+sprites/<name>/parts/*.txt    small pieces of any size (a door, a window), placed on the canvas with "at"
+sprites/<name>/glyphs.txt     a font's letters (fonts only)
 export/<name>.png|.json       generated: Phaser load.aseprite format, or a Tiled tileset for tilesets (+ index.json, pixelforge.js)
+                              (+ <name>.xml for fonts, <name>_tiles.png|.json for sliced buildings)
 export/gallery.html           generated: shareable page of every sprite (`pixelforge gallery`)
 critiques.json                notes the developer left in the dashboard for you to fix (`pixelforge critiques`)
 previews/                     generated: renders, sheets, GIFs (gitignored)
@@ -20,7 +23,20 @@ previews/                     generated: renders, sheets, GIFs (gitignored)
    "replace": {"k": "w"}, "duration": 120}
   ```
   Applied in order: `from` (base, may itself be an object) → `layers` painted bottom-to-top → `flip` → `offset` → `roll` (offset that wraps around the edges) → `replace` (palette swap, e.g. white hit flash). `duration` (ms) overrides `1000/fps`.
+- A **part entry** places a small grid from `parts/` instead of a whole-canvas frame: `{"part": "window", "at": [8, 54]}`, or `"at": [[8, 54], [44, 54]]` to stamp it several times. `flip` and `replace` apply to the part itself. Use it in `layers` or as `from`.
 - `loop: false` animations play once.
+
+## Game settings: view and resolution
+`pixelforge.json` says how the game looks, and `new`, `check` and the Phaser helper follow it:
+- `"view"`: `"side"` (platformers), `"topdown"` (3/4 view RPGs) or `"overhead"` (bird's-eye). It picks `new`'s default class, a prop's default footprint and whether props y-sort. One sprite can override it with its own `"view"`.
+- `"resolution"`: the game's screen before scaling, e.g. `[320, 180]`. `check` warns when a prop is bigger than the screen.
+
+## Big art: build it from parts
+Text grids stay accurate up to about 64px. Past that, long lines, perspective and repeated details drift. So never draw a 100px+ canvas as one hand-written grid:
+- Keep the big layers simple and regular (a wall face, a roof), and use `paint` ops (`frect`, `line`, `fill`) for them.
+- Draw each detail once as a small part (door, window, chimney, sign) and place it with `at`. Reuse it: the same window on every floor, the same part with `replace` for a lit window at night.
+- Render the whole thing and judge it at 1x and 2x, as for any sprite. `render` zooms big canvases less, and `render S @part` shows one part on its own.
+- Repetition is fine where the real thing repeats (shingles, bricks). Break up big flat areas with one or two placed details (a dormer, a crack, ivy).
 
 ## Size classes: canvas vs body box
 Every character uses a standard **class** from `pixelforge.json` (`"class": "humanoid"` in sprite.json) instead of its own size:
@@ -58,6 +74,30 @@ The character stands in the **body box** (bottom-centre, on the origin), which i
 - `render` and `sheet` show the unrotated art. `/viewer/phaser.html` shows it rotating and spars at 0° and 135°.
 - Reference: `sprites/knight_overhead`.
 
+## Props, buildings and background accents
+A prop is anything that isn't a character, a tile or UI: chests, trees, signs, crates, houses, clouds, distant mountains. Give it `"type": "prop"` (scaffold: `new chest --prop --size 16x16`, or `new inn --building`). Its animations are its **states** (`closed`, `opening`, `open`; one-frame animations are fine), and the game picks one by name.
+```json
+{"type": "prop", "size": [64, 80], "origin": [32, 80], "footprint": [2, 16, 60, 64], "slice": [16, 16],
+ "animations": {"closed": {"frames": [{"layers": ["walls", "roof", {"part": "door", "at": [26, 54]}]}]}}}
+```
+- `origin`: where it stands, usually the bottom-centre of its base.
+- `footprint` `[x, y, w, h]`: the solid part that blocks movement. It's exported as the body. Without one, the art's bounds block.
+  - **Top-down:** the footprint is the ground it covers: everything but the top edge of a roof or tree canopy. That top strip is walk-behind, so a character standing north of the house is drawn behind it. `check` warns about a solid top-down prop without a footprint.
+  - **Side view:** houses are usually scenery the player walks in front of: `"solid": false`.
+- `"layer"`: `back` (behind everything), `world` (the default: among the characters) or `front` (over everything, e.g. foreground leaves). `"solid"` defaults to true for world props only.
+- `"scroll"`: a parallax factor for background accents. Use `0.2` for far mountains, `0.5` for mid trees and `1` for the world. Setting it puts the prop on the `back` layer.
+- **Backgrounds:** don't paint whole screens. The game fills the sky with a flat color or a gradient, and you add a few accent props on top: clouds, a far skyline, hills, a moon. Keep them lower in contrast than the play area, with soft or no outlines. Reference: `sprites/cloud`.
+- **Buildings, two ways:**
+  - A **unique** building (inn, castle, shop) is one prop made of parts. `"slice": [16, 16]` also exports it cut into tiles (`export/<name>_tiles`), so it can be stamped into Tiled maps too. The tiles under the footprint get `collides`, and in top-down, the roof tiles above it get `above`.
+  - **Generic** buildings (a village of similar houses) are a tileset kit (wall, roof, door and window tiles) plus `stamps` for ready-made arrangements (see Tilesets).
+- States that only differ in a detail share layers: the open door is the same entry with `door_open` placed instead of `door`, and lit windows are a `replace` on the window part.
+- References: `sprites/house` (top-down building with parts, sliced), `sprites/chest` (states built from parts), `sprites/cloud` (parallax accent).
+
+## UI: icons, panels and fonts
+- **Icons** (`new items --icons`): `"type": "icons"`, a fixed cell `size` (16×16 is typical) and `"icons": [...]`, listed like tiles: a frame id, or an entry with a `"name"` (e.g. `{"name": "heart_empty", "from": "heart", "replace": {"r": "B"}}`). They're exported as an atlas, and the game shows one by name. Icons don't animate (make an animated pickup a prop).
+- **Panels and buttons**: an icon with `"nine": [left, right, top, bottom]` border widths is a nine-slice. The corners stay crisp and the edges and middle stretch to any size. `tiles S` shows each one stretched to three sizes: check that the border still reads.
+- **Fonts** (`new hud --font` starts from a 5×7 font with A–Z, 0–9 and punctuation): `"type": "font"`, with `"size": [max glyph width, height]`, `"spacing"` (px between letters), `"space"` (width of a space) and `"line_height"`. The glyphs live in `glyphs.txt` as blocks: a `= A` line, then the glyph's rows, all the same length (that length is its width). Without lowercase glyphs, lowercase letters reuse the capitals. `tiles myfont "GAME OVER"` previews any text. Draw the ink white so the game can `setTint()` it.
+
 ## Tilesets (terrain, floors, walls)
 A tileset is a sprite folder with `"type": "tileset"`. Its frames are tiles instead of animation frames. Make one with `new terrain --tileset` (16×16 tiles by default, or `--size 32x32`).
 ```json
@@ -79,6 +119,7 @@ A tileset is a sprite folder with `"type": "tileset"`. Its frames are tiles inst
   `roll: [dx, dy]` is an `offset` that wraps around the tile edges, so moving waves stay seamless. Keep tile motion subtle: 3–4 frames, 200–300ms each, with a few pixels changing per frame. The extra frames are exported after the named tiles, so tile numbers don't change. `tiles S` shows every frame, and `gif S` / `gif S TILE` play the sample map or one tile.
 - `properties` maps tile-name globs to properties (every match merges, later patterns win). `collides: true` is what the Phaser helper turns into collision. Any other keys reach `tile.properties` in the game.
 - `sample` is a small test map (`' '`/`.` = empty). It's rendered by `tiles`, shown in the gallery, and walkable in `/viewer/tilemap.html`. Put every tile and every transition you care about in it.
+- `stamps` are named multi-tile arrangements made from the kit, such as a house, a pond or a fence run: `"stamps": {"hut": {"rows": ["/^\\", "|d|"]}}`. Their legend defaults to the sample's (or give one with `"legend"`). `tiles S` draws them, and `stampPixelforgeTiles` places them in the game.
 - Ground tiles must repeat without seams: `tiles S` shows each one repeated 3×3, and `check` warns when a wrapped edge jumps in brightness. Edge/transition tiles and one-row tiles like walls are expected to warn on the axis they don't repeat along.
 - Use cast shadows instead of black outlines: a dark-brown row under a grass edge, navy under a riverbank. Light comes from the top-left, so don't just flip a shadowed edge to make the opposite side. Flip only the unshaded layer.
 - 3/4 top-down walls: a light top surface, then the face (bricks), then a dark base row. Keep them to one tile high and mark them `collides`.
@@ -101,18 +142,18 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | | |
 |---|---|
 | `list` | sprites + animations |
-| `new NAME [--class humanoid]` | scaffold (or `--size WxH` for a one-off canvas; `--tileset [--size 16x16]` for terrain) |
-| `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show) + the sample map → `previews/` |
+| `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
+| `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
 | `resize S WxH` / `resize S --class C` | re-canvas every frame, keeping the character on its origin |
-| `show S ANIM I` / `show S @frame` / `show S TILE` | print a frame (or a tileset's tile) with x/y rulers (find exact coordinates) |
-| `render S ANIM I [--onion] [--scale N] [--no-boxes]` | zoomed PNG with grid, rulers, origin mark, boxes, 1x/2x thumbs → `previews/` |
+| `show S ANIM I` / `show S @frame` / `show S @part` / `show S TILE` | print a frame, part or tile with x/y rulers (find exact coordinates) |
+| `render S ANIM I [--onion] [--scale N] [--no-boxes]` | zoomed PNG with grid, rulers, origin mark, boxes (a prop's footprint), slice lines, 1x/2x thumbs → `previews/` |
 | `sheet S [ANIM...] [--onion] [--boxes]` | all frames side by side + 1x strip: judge motion and consistency (active frames labelled) |
 | `motion S [ANIM...]` | timing you can't see in stills: per-frame table (head, feet, body centre, weapon tip and reach, pixels changed, ms), notes on uneven spacing / unheld wind-up / slow smear / bob size, and a timeline chart PNG |
 | `compare S [ANIM I \| @frame \| TILE] [--ref HEAD]` | before (as committed in git) / after / changed pixels. With no target: every frame, so you see everything a layer edit touched |
 | `context S ANIM [I] [--on terrain:grass --on '#262b44']` | the sprite on real ground at game zoom (3x), in grayscale, and a map of silhouette edges that blend into the ground, with contrast numbers |
 | `gif S [ANIM]` | animated GIF at real timing (for the user). For a tileset: the sample map, or `gif S TILE` for one tile repeated 3×3 |
 | `check [S] [-v]` | lint: sizes, undefined keys, missing frames, floating pixels, feet jitter, jump cuts, palette size |
-| `paint S FRAME "ops"` | edit a frame file: `px x y k [x y k...]; frect x0 y0 x1 y1 k; box ...; line x0 y0 x1 y1 k; fill x y k; move x0 y0 x1 y1 dx dy; shift dx dy; mirror lr\|rl; swap a b; clear` (`.` erases) |
+| `paint S FRAME "ops"` | edit a frame or part file: `px x y k [x y k...]; frect x0 y0 x1 y1 k; box ...; line x0 y0 x1 y1 k; fill x y k; move x0 y0 x1 y1 dx dy; shift dx dy; mirror lr\|rl; swap a b; clear` (`.` erases) |
 | `dup S SRC DST [--flip h] [--offset dx dy]` | copy a frame file |
 | `palette S` | swatch PNG |
 | `import PNG NAME [--cell 32x32]` | PNG/sheet/atlas → frames (reuses existing palette keys) |
@@ -194,4 +235,24 @@ create()  {
 //   applyPixelforgeTileProperties(layer, 'terrain'); animatePixelforgeTiles(layer, 'terrain');
 ```
 - `pixelforgeTilemap` plays animated tiles for you (Phaser doesn't animate tiles on its own). An animating tile's `index` changes from frame to frame, so identify tiles by `tile.properties.name`. Tiles added later with `putTileAt` only animate after you call `animatePixelforgeTiles(layer, name)` again.
+Props, stamps and UI:
+```js
+import { addPixelforgeProp, keepPixelforgeDepth, stampPixelforgeTiles, loadPixelforgeIcons, addPixelforgePanel,
+         loadPixelforgeFont } from './export/pixelforge.js';
+preload() { loadPixelforge(this, 'house'); loadPixelforge(this, 'cloud');      // props load like sprites
+            loadPixelforgeIcons(this, 'ui'); loadPixelforgeFont(this, 'font'); }
+create()  {
+  const house = addPixelforgeProp(this, 160, 120, 'house');            // (x, y) = its origin; plays its first state
+  this.physics.add.collider(hero, house);                              // solid props get a static body (the footprint)
+  house.play('house_open');                                            // states are animations: <prop>_<state>
+  addPixelforgeProp(this, 200, 40, 'cloud');                           // back layer, scroll factor 0.3: parallax
+  keepPixelforgeDepth(this, [hero]);                                   // top-down: characters sort by y with the props
+  stampPixelforgeTiles(layer, 'terrain', 'pond', 4, 6, { above: roofLayer });   // `above` tiles go over characters
+  this.add.image(12, 12, 'ui', 'heart').setScrollFactor(0);
+  addPixelforgePanel(this, 160, 160, 'ui', 'panel', 200, 32).setScrollFactor(0);
+  this.add.bitmapText(70, 152, 'font', 'Press START').setTint(0x181425).setScrollFactor(0);
+}
+```
+- A sliced building is also a tileset: `loadPixelforgeTiles(this, 'house_tiles')`, then `stampPixelforgeTiles(layer, 'house_tiles', 'house', tx, ty, { above })`, or paint it in Tiled.
+- `/viewer/tilemap.html?prop=house` (a top-down prop's "In game" tab) stands the prop on a tileset's sample map, so you can walk around it, into its footprint and behind its roof.
 - For top-down characters, collide with the feet only: `hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8)` with `b = pixelforgeBody(...)`, so the head can overlap the top of a wall.

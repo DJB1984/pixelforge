@@ -6,7 +6,7 @@ import io
 import json
 from datetime import date
 
-from .export import build_sheet, build_tileset
+from .export import build_sheet, build_tileset, prop_info
 from .model import ASSETS, Sprite, list_sprites, project_config, root, to_hex
 
 
@@ -20,10 +20,10 @@ def gallery_data(names: list[str] | None = None) -> dict:
     sprites, tilesets = [], []
     for name in names or list_sprites():
         s = Sprite.load(name)
-        if s.kind == "tileset":
+        if s.tiled:
             img, data = build_tileset(s, padding=1)
             tilesets.append({
-                "name": s.name, "w": s.width, "h": s.height, "cols": data["columns"], "spacing": data["spacing"],
+                "name": s.name, "kind": s.kind, "w": s.width, "h": s.height, "cols": data["columns"], "spacing": data["spacing"],
                 "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()],
                 "tiles": [{"name": n, "props": p} for n, p in zip(data["pixelforge"]["names"],
                                                                    data["pixelforge"]["properties"])],
@@ -43,8 +43,9 @@ def gallery_data(names: list[str] | None = None) -> dict:
                            for f in frames[tag["from"]:tag["to"] + 1]],
             })
         sprites.append({
-            "name": s.name, "w": s.width, "h": s.height, "origin": list(s.origin),
+            "name": s.name, "kind": s.kind, "w": s.width, "h": s.height, "origin": list(s.origin),
             "body": list(s.body_rect()), "class": s.size_class,
+            **({"prop": prop_info(s)} if s.kind == "prop" else {}),
             "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()],
             "sheet": _data_uri(img),
             "anims": anims,

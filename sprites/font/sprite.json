@@ -1,0 +1,15 @@
+{
+  "name": "font",
+  "type": "font",
+  "size": [
+    5,
+    7
+  ],
+  "spacing": 1,
+  "space": 3,
+  "line_height": 10,
+  "palette": {
+    "#": "white",
+    "k": "outline"
+  }
+}

@@ -42,8 +42,9 @@ def _frame_target(s: Sprite, anim: str, index: str):
     """`anim index`, `@frame_id` or (tilesets) `tile_name` addressing. Returns (grid, label, prev, next)."""
     if anim.startswith("@"):
         fid = anim[1:]
-        return s.load_frame(fid, strict=False), f"{s.name} @{fid}", None, None
-    if s.kind == "tileset":
+        part = s.layer_path(fid) == s.part_path(fid)
+        return s.load_layer(fid, strict=False), f"{s.name} @{fid}{' (part)' if part else ''}", None, None
+    if s.tiled:
         return s.tile(anim), f"{s.name} tile {s.tile_index(anim)} {anim}", None, None
     a = s.anim(anim)
     i = int(index) % len(a.frames)
@@ -58,12 +59,17 @@ def _frame_target(s: Sprite, anim: str, index: str):
 def cmd_list(args):
     for n in list_sprites():
         s = Sprite.load(n)
-        if s.kind == "tileset":
-            print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  tileset: {len(s.tiles)} tiles "
-                  f"({', '.join(s.tile_names()[:6])}{', ...' if len(s.tiles) > 6 else ''})")
+        if s.tiled:
+            noun = {"icons": "icons", "font": "glyphs"}.get(s.kind, "tiles")
+            names = "".join(s.tile_names()) if s.kind == "font" else \
+                ", ".join(s.tile_names()[:6]) + (", ..." if len(s.tiles) > 6 else "")
+            print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {s.kind}: {len(s.tiles)} {noun} ({names})"
+                  + (f"  stamps: {', '.join(s.stamps)}" if s.stamps else ""))
             continue
         anims = ", ".join(f"{k}({len(a.frames)})" for k, a in s.animations.items())
-        print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {anims}")
+        what = (f"prop ({s.layer}{', solid' if s.solid else ''}{f', scroll {s.scroll:g}' if s.scroll != 1 else ''}"
+                f"{', sliced' if s.slice else ''})  ") if s.kind == "prop" else ""
+        print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {what}{anims}")
 
 
 def cmd_new(args):
@@ -81,6 +87,11 @@ def cmd_new(args):
         (path / "sprite.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
         print(f"created {_rel(path)}/sprite.json and frames/tile_0.txt ({w}x{h} tileset)")
         return
+    if args.icons or args.font:
+        return _new_ui(args, path, meta)
+    if args.prop or args.building:
+        return _new_prop(args, path, meta)
+    args.cls = args.cls or model.VIEW_CLASS[model.game_view()]
     if args.size:
         w, h = _size(args.size)
         meta.update(size=[w, h], origin=[w // 2, h])
@@ -100,6 +111,77 @@ def cmd_new(args):
     (path / "sprite.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     print(f"created {_rel(path)}/sprite.json and frames/idle_0.txt ({w}x{h}"
           f"{', class ' + args.cls if not args.size else ''})")
+
+
+def _write_new(path: Path, meta: dict, frames: dict[str, Grid], parts: dict[str, Grid] | None = None) -> None:
+    for sub, files in (("frames", frames), ("parts", parts or {})):
+        if files:
+            (path / sub).mkdir(parents=True, exist_ok=True)
+        for fid, g in files.items():
+            (path / sub / f"{fid}.txt").write_text(g.to_text(), encoding="utf-8")
+    (path / "sprite.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+
+BUILDING_SIZE = {"side": (96, 80), "topdown": (64, 80), "overhead": (64, 64)}
+
+
+def _new_prop(args, path: Path, meta: dict) -> None:
+    """A prop (object, decoration, background accent) or, with --building, a building made of parts."""
+    view = model.game_view()
+    if args.size:
+        w, h = _size(args.size)
+    else:
+        w, h = BUILDING_SIZE[view] if args.building else (32, 32)
+    meta.update({"type": "prop", "size": [w, h], "origin": [w // 2, h // 2] if view == "overhead" else [w // 2, h]})
+    parts: dict[str, Grid] = {}
+    if not args.building:
+        meta.update(palette={"k": "outline", "w": "white"}, animations={"idle": {"fps": 4, "frames": ["idle_0"]}})
+        if view == "topdown":
+            meta["footprint"] = [w // 4, h - max(4, h // 4), w // 2, max(4, h // 4)]
+        _write_new(path, meta, {"idle_0": Grid.blank(w, h)})
+        print(f"created {_rel(path)}/sprite.json and frames/idle_0.txt ({w}x{h} prop, {view} view)")
+        return
+    dw, dh = 12, min(20, h // 3)
+    meta.update({
+        "palette": {"k": "outline", "w": "white", "b": "brown", "B": "dark_brown", "r": "rust", "R": "crimson",
+                    "g": "light_gray", "G": "gray"},
+        "animations": {"closed": {"frames": [{"layers": [
+            "walls", "roof",
+            {"part": "door", "at": [w // 2 - dw // 2, h - dh]},
+            {"part": "window", "at": [[w // 5 - 4, h - dh - 2], [w - w // 5 - 4, h - dh - 2]]}]}]}},
+        "slice": [16, 16],
+    })
+    if view == "topdown":
+        meta["footprint"] = [0, 16, w, h - 16]   # the house stands on everything but the roof's top edge (walk-behind)
+    elif view == "side":
+        meta["solid"] = False   # side-view houses are scenery the player walks in front of
+    parts = {"door": Grid.blank(dw, dh), "window": Grid.blank(8, 8)}
+    _write_new(path, meta, {"walls": Grid.blank(w, h), "roof": Grid.blank(w, h)}, parts)
+    print(f"created {_rel(path)}/sprite.json, frames/walls.txt + roof.txt ({w}x{h}) and parts/door.txt "
+          f"({dw}x{dh}) + window.txt (8x8): a {view}-view building, sliced into 16x16 tiles on export")
+
+
+def _new_ui(args, path: Path, meta: dict) -> None:
+    if args.icons:
+        w, h = _size(args.size or "16")
+        meta.update({"type": "icons", "size": [w, h], "columns": model.TILE_COLUMNS,
+                     "palette": {"k": "outline", "w": "white"}, "icons": ["icon_0"]})
+        _write_new(path, meta, {"icon_0": Grid.blank(w, h)})
+        print(f"created {_rel(path)}/sprite.json and frames/icon_0.txt ({w}x{h} icons)")
+        return
+    w, h = _size(args.size or "5x7")
+    template = ASSETS / "font_5x7.txt"
+    meta.update({"type": "font", "size": [w, h], "spacing": 1, "space": 3, "line_height": h + 3,
+                 "palette": {"#": "white", "k": "outline"}})
+    path.mkdir(parents=True)
+    if (w, h) == (5, 7):
+        shutil.copyfile(template, path / "glyphs.txt")
+        note = "a starter 5x7 font (A-Z, 0-9, punctuation): restyle it or draw your own"
+    else:
+        (path / "glyphs.txt").write_text("= A\n" + (("." * w) + "\n") * h, encoding="utf-8")
+        note = f"one blank {w}x{h} glyph to start from"
+    (path / "sprite.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"created {_rel(path)}/sprite.json and glyphs.txt ({note})")
 
 
 def cmd_resize(args):
@@ -157,8 +239,9 @@ def cmd_show(args):
 def cmd_render(args):
     s = Sprite.load(args.sprite)
     g, label, prev, nxt = _frame_target(s, args.anim, args.index)
+    part = args.anim.startswith("@") and s.layer_path(args.anim[1:]) == s.part_path(args.anim[1:])
     boxes = None
-    if not args.no_boxes and s.kind != "tileset":
+    if not args.no_boxes and not s.tiled and not part:
         if args.anim.startswith("@"):  # a raw layer: show its role as if active
             boxes = frame_boxes(s, args.anim[1:], active=True)
         else:
@@ -167,10 +250,13 @@ def cmd_render(args):
             boxes = frame_boxes(s, a.frames[i], a.active(i))
             if a.active(i):
                 label += "  ACTIVE"
-    img = rd.preview(s, g, scale=args.scale, title=label,
+    if s.kind == "prop" and not part:
+        label += f"  footprint {list(s.body_rect())}" + (f"  slice {s.slice[0]}x{s.slice[1]}" if s.slice else "")
+    img = rd.preview(s, g, scale=args.scale or rd.auto_scale(g.width, g.height), title=label,
                      prev=prev if args.onion else None, nxt=nxt if args.onion else None,
-                     gridlines=not args.no_grid, boxes=boxes, show_origin=s.kind != "tileset")
-    tag = args.anim.lstrip("@") + ("" if args.anim.startswith("@") or s.kind == "tileset" else f"_{int(args.index)}")
+                     gridlines=not args.no_grid, boxes=boxes, show_origin=not s.tiled and not part,
+                     slices=s.slice if s.kind == "prop" and not part else None)
+    tag = args.anim.lstrip("@") + ("" if args.anim.startswith("@") or s.tiled else f"_{int(args.index)}")
     out = Path(args.out) if args.out else _previews() / f"{s.name}_{tag}{'_onion' if args.onion else ''}.png"
     img.save(out)
     print(_rel(out))
@@ -178,11 +264,18 @@ def cmd_render(args):
 
 def cmd_tiles(args):
     s = Sprite.load(args.tileset)
-    if s.kind != "tileset":
-        sys.exit(f"{s.name} is not a tileset (sprite.json needs \"type\": \"tileset\"); use `sheet` for sprites")
+    if not s.tiled:
+        sys.exit(f"{s.name} is a {s.kind}, not a tileset/icons/font; use `sheet` for it")
+    if s.kind == "font":   # `tiles myfont "GAME OVER"`: the words, set in the font
+        img = rd.font_preview(s, [" ".join(args.tiles)] if args.tiles else None, scale=args.scale)
+        out = _previews() / f"{s.name}_font.png"
+        img.save(out)
+        print(_rel(out))
+        return
     for t in args.tiles:
         s.tile_index(t)
-    img = rd.tileset_preview(s, args.tiles or None, scale=args.scale, repeat=args.repeat)
+    repeat = args.repeat if s.kind == "tileset" else 1   # icons don't repeat edge to edge
+    img = rd.tileset_preview(s, args.tiles or None, scale=args.scale, repeat=repeat)
     out = _previews() / f"{s.name}_tiles{'_' + '_'.join(args.tiles) if args.tiles else ''}.png"
     img.save(out)
     print(_rel(out))
@@ -190,13 +283,14 @@ def cmd_tiles(args):
 
 def cmd_sheet(args):
     s = Sprite.load(args.sprite)
-    if s.kind == "tileset":
-        args.tileset, args.tiles, args.repeat = args.sprite, [], 3
+    if s.tiled:
+        args.tileset, args.tiles, args.repeat, args.scale = args.sprite, [], 3, args.scale or 4
         return cmd_tiles(args)
     anims = args.anims or list(s.animations)
     for a in anims:
         s.anim(a)
-    img = rd.sheet(s, anims, scale=args.scale, onion=args.onion, boxes=args.boxes)
+    img = rd.sheet(s, anims, scale=args.scale or rd.auto_scale(s.width, s.height, most=6, budget=500),
+                   onion=args.onion, boxes=args.boxes)
     suffix = ("_" + "_".join(args.anims) if args.anims else "") + ("_onion" if args.onion else "")
     out = _previews() / f"{s.name}_sheet{suffix}.png"
     img.save(out)
@@ -205,7 +299,7 @@ def cmd_sheet(args):
 
 def cmd_motion(args):
     s = Sprite.load(args.sprite)
-    if s.kind == "tileset":
+    if s.tiled:
         sys.exit(f"{s.name} is a tileset; `tiles {s.name}` shows its animated tiles frame by frame")
     for a in args.anims or list(s.animations):
         fm = motion.measure(s, a)
@@ -236,7 +330,7 @@ def cmd_compare(args):
             fid, label = args.target[1:], args.target
             b = rd.to_image(before, before.load_frame(fid, strict=False)) if before.frame_path(fid).is_file() else None
             a = rd.to_image(s, s.load_frame(fid, strict=False))
-        elif s.kind == "tileset":
+        elif s.tiled:
             label = args.target
             b = rd.to_image(before, before.tile(label)) if label in before.tile_names() else None
             a = rd.to_image(s, s.tile(label))
@@ -258,7 +352,7 @@ def cmd_compare(args):
 
 def cmd_context(args):
     s = Sprite.load(args.sprite)
-    if s.kind == "tileset":
+    if s.tiled:
         sys.exit(f"{s.name} is a tileset; use `context <sprite> <anim> --on {s.name}:<tile>`")
     a = s.anim(args.anim)
     idx = [int(args.index) % len(a.frames)] if args.index is not None else range(len(a.frames))
@@ -274,7 +368,7 @@ def cmd_context(args):
 
 def cmd_gif(args):
     s = Sprite.load(args.sprite)
-    if s.kind == "tileset":  # `gif terrain` = the sample map; `gif terrain water` = one tile, 3x3
+    if s.tiled:  # `gif terrain` = the sample map; `gif terrain water` = one tile, 3x3
         if args.anim:
             s.tile_index(args.anim)
         elif not s.sample:
@@ -327,8 +421,7 @@ def cmd_export(args):
 def _export(names: list[str], padding: int = 1) -> list[str]:
     out = []
     for n in names:
-        png, js = ex.export_sprite(Sprite.load(n), padding=padding)
-        out.append(f"{_rel(png)}  {_rel(js)}")
+        out.append("  ".join(_rel(p) for p in ex.export_sprite(Sprite.load(n), padding=padding)))
     ex.export_dir().mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS / "phaser" / "pixelforge.js", ex.export_dir() / "pixelforge.js")
     out.append(_rel(ex.write_index()))
@@ -344,10 +437,11 @@ def cmd_import(args):
 
 def cmd_dup(args):
     s = Sprite.load(args.sprite)
-    dst = s.frame_path(args.dst)
+    src = s.layer_path(args.src)
+    dst = src.parent / f"{args.dst}.txt"   # a part copies to a part, a frame to a frame
     if dst.exists() and not args.force:
         sys.exit(f"{_rel(dst)} exists (use --force)")
-    g = s.load_frame(args.src, strict=False)
+    g = s.load_layer(args.src, strict=False)
     if args.flip:
         g = g.flip(args.flip)
     if args.offset:
@@ -393,7 +487,7 @@ def cmd_paint(args):
      mirror lr; swap a b; shift 1 0; move 8 3 21 17 0 1"   ("." erases)
     """
     s = Sprite.load(args.sprite)
-    g = s.load_frame(args.frame, strict=False)
+    g = s.load_layer(args.frame, strict=False)
     for raw in " ".join(args.ops).split(";"):
         parts = raw.split()
         if not parts:
@@ -441,8 +535,8 @@ def cmd_paint(args):
     for k in g.keys():
         if k not in s.palette:
             print(f"warning: key {k!r} is not in the palette")
-    s.frame_path(args.frame).write_text(g.to_text(), encoding="utf-8")
-    print(_rel(s.frame_path(args.frame)))
+    s.layer_path(args.frame).write_text(g.to_text(), encoding="utf-8")
+    print(_rel(s.layer_path(args.frame)))
 
 
 def cmd_serve(args):
@@ -504,7 +598,7 @@ def cmd_init(args):
     """Turn a folder (default: current) into a pixelforge art root for one game."""
     target = Path(args.dir).resolve()
     try:
-        report = init_project(target, args.name)
+        report = init_project(target, args.name, args.view, _size(args.resolution))
     except FileExistsError as e:
         sys.exit(str(e))
     print(f"initialised pixelforge {__version__} project '{args.name or target.name}' in {target}")
@@ -560,6 +654,9 @@ def main(argv=None):
     q = sub.add_parser("init", help="set up a game folder for pixelforge")
     q.add_argument("dir", nargs="?", default=".")
     q.add_argument("--name", help="game name shown in the gallery (default: folder name)")
+    q.add_argument("--view", choices=model.VIEWS, default="side",
+                   help="the game's camera: side (platformer), topdown (3/4 view) or overhead (bird's-eye)")
+    q.add_argument("--resolution", default="320x180", help="base screen size before scaling (default 320x180)")
     q.set_defaults(fn=cmd_init)
 
     q = sub.add_parser("upgrade", help="update this game's guide/scaffolding to the installed pixelforge, re-export")
@@ -577,14 +674,23 @@ def main(argv=None):
 
     q = sub.add_parser("new", help="scaffold a sprite")
     q.add_argument("name")
-    q.add_argument("--class", dest="cls", default="humanoid", help="size class from pixelforge.json (default humanoid)")
-    q.add_argument("--size", help="explicit WxH instead of a class (with --tileset: tile size, default 16x16)")
-    q.add_argument("--tileset", action="store_true", help="a tileset (terrain, walls, floors) instead of a sprite")
+    q.add_argument("--class", dest="cls", help="size class from pixelforge.json (default: humanoid for a side "
+                                              "view, topdown or overhead for those views)")
+    q.add_argument("--size", help="explicit WxH instead of a class (--tileset/--icons: cell size, default 16x16; "
+                                  "--prop: 32x32; --building: by view; --font: glyph cell, default 5x7)")
+    kind = q.add_mutually_exclusive_group()
+    kind.add_argument("--tileset", action="store_true", help="a tileset (terrain, walls, floors) instead of a sprite")
+    kind.add_argument("--prop", action="store_true", help="an object: chest, tree, sign, a background accent")
+    kind.add_argument("--building", action="store_true", help="a prop made of parts (walls, roof, door, windows), "
+                                                              "also exported as tiles")
+    kind.add_argument("--icons", action="store_true", help="a UI atlas: item icons, panels and buttons")
+    kind.add_argument("--font", action="store_true", help="a bitmap font (starts from a 5x7 font)")
     q.set_defaults(fn=cmd_new)
 
-    q = sub.add_parser("tiles", help="tileset preview: each tile repeated 3x3 (shows seams) + the sample map")
+    q = sub.add_parser("tiles", help="tileset preview: each tile repeated 3x3 (shows seams), the sample map and "
+                                     "stamps; icons with their panels stretched; a font's glyphs and sample text")
     q.add_argument("tileset")
-    q.add_argument("tiles", nargs="*", help="only these tiles (default: all)")
+    q.add_argument("tiles", nargs="*", help="only these tiles (default: all); for a font, text to set")
     q.add_argument("--scale", type=int, default=4)
     q.add_argument("--repeat", type=int, default=3)
     q.set_defaults(fn=cmd_tiles)
@@ -593,10 +699,10 @@ def main(argv=None):
                           ("render", cmd_render, "zoomed PNG preview of one frame")):
         q = sub.add_parser(name, help=hlp)
         q.add_argument("sprite")
-        q.add_argument("anim", help="animation name, @frame_id for a raw frame file, or a tileset's tile name")
+        q.add_argument("anim", help="animation name, @id for a raw frame or part file, or a tileset's tile name")
         q.add_argument("index", nargs="?", default="0")
         if name == "render":
-            q.add_argument("--scale", type=int, default=16)
+            q.add_argument("--scale", type=int, help="zoom (default 16, less for big canvases)")
             q.add_argument("--onion", action="store_true", help="ghost prev (red) / next (blue) frames")
             q.add_argument("--no-boxes", action="store_true", help="hide body/hurt/hit box outlines")
             q.add_argument("--no-grid", action="store_true")
@@ -606,7 +712,7 @@ def main(argv=None):
     q = sub.add_parser("sheet", help="contact sheet of animations")
     q.add_argument("sprite")
     q.add_argument("anims", nargs="*")
-    q.add_argument("--scale", type=int, default=6)
+    q.add_argument("--scale", type=int, help="zoom (default 6, less for big canvases)")
     q.add_argument("--onion", action="store_true")
     q.add_argument("--boxes", action="store_true", help="outline body box, hurtboxes, hitboxes")
     q.set_defaults(fn=cmd_sheet)
@@ -683,7 +789,7 @@ def main(argv=None):
     q = sub.add_parser("paint", help="drawing ops on a frame file", description=cmd_paint.__doc__,
                        formatter_class=argparse.RawDescriptionHelpFormatter)
     q.add_argument("sprite")
-    q.add_argument("frame", help="frame id (file name without .txt)")
+    q.add_argument("frame", help="frame or part id (file name without .txt)")
     q.add_argument("ops", nargs="+")
     q.set_defaults(fn=cmd_paint)
 

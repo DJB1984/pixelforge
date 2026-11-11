@@ -19,7 +19,8 @@
 <div class="bar">
   <label class="ts">Tileset <select id="tileset"></select></label>
   <label>Walker <select id="walker"></select></label>
-  <label><input type="checkbox" id="debug"> Show colliding tiles</label>
+  <label class="pr">Prop <select id="prop"></select></label>
+  <label><input type="checkbox" id="debug"> Show colliding tiles and footprints</label>
   <span>Arrows or WASD to walk</span>
   <span id="info"></span>
 </div>
@@ -27,7 +28,7 @@
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script type="module">
 import { loadPixelforge, createPixelforgeAnims, loadPixelforgeTiles, pixelforgeTilemap, pixelforgeTileIndex,
-         pixelforgeBody, playFacing } from '../phaser/pixelforge.js';
+         pixelforgeBody, playFacing, addPixelforgeProp } from '../phaser/pixelforge.js';
 
 const BASE = '../live/';   // live builds from `pixelforge serve`: the working tree, not the last export
 const index = await (await fetch(`${BASE}index.json`, { cache: 'no-store' })).json();
@@ -50,7 +51,7 @@ if (!tilesets.length) {
   class MapScene extends Phaser.Scene {
     preload() {
       loadPixelforgeTiles(this, tsName, BASE);
-      for (const name of index.sprites) loadPixelforge(this, name, BASE);
+      for (const name of [...index.sprites, ...(index.props ?? [])]) loadPixelforge(this, name, BASE);
     }
     create() {
       // any top-down character (has walk_down) can walk the map
@@ -66,12 +67,29 @@ if (!tilesets.length) {
       this.layer = layer;
       this.marker = this.add.graphics().setDepth(1e6);
 
+      // a prop (?prop=name) stands in the middle of the map: walk around it, into it, behind its roof
+      const props = index.props ?? [];
+      const propName = props.includes(params.get('prop')) ? params.get('prop') : '';
+      fill($('prop'), ['', ...props], propName);
+      if (!props.length) document.querySelector('.pr').style.display = 'none';
+      let blocked = null;
+      if (propName) {
+        const pm = this.cache.json.get(propName).meta.pixelforge;
+        const x = Math.round(map.widthInPixels / 2), y = Math.round(map.heightInPixels / 2 / map.tileHeight) * map.tileHeight;
+        this.prop = addPixelforgeProp(this, x, y, propName);
+        const fp = pm.body, left = x - pm.origin[0], top = y - pm.origin[1];
+        blocked = { x: left + fp.x, y: top + fp.y, w: fp.w, h: fp.h };
+        window.pixelforgeProp = this.prop;
+      }
+
       if (heroName) {
         createPixelforgeAnims(this, heroName);
-        // start on the walkable tile nearest the middle of the map
-        const cx = map.width / 2, cy = map.height / 2;
+        // start on the walkable tile nearest the middle of the map (just below a prop's footprint)
+        const cx = map.width / 2, cy = blocked ? (blocked.y + blocked.h) / map.tileHeight + 0.5 : map.height / 2;
+        const inside = (t) => blocked && t.pixelX < blocked.x + blocked.w && blocked.x < t.pixelX + t.width
+          && t.pixelY < blocked.y + blocked.h && blocked.y < t.pixelY + t.height;
         const spots = [];
-        layer.forEachTile((t) => { if (t.index >= 0 && !t.collides) spots.push(t); });
+        layer.forEachTile((t) => { if (t.index >= 0 && !t.collides && !inside(t)) spots.push(t); });
         spots.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
         const start = spots[0] ?? { pixelX: 0, pixelY: 0 };
         this.hero = this.physics.add.sprite(start.pixelX + map.tileWidth / 2, start.pixelY + map.tileHeight - 2, heroName);
@@ -80,6 +98,7 @@ if (!tilesets.length) {
         this.hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8);
         this.hero.setCollideWorldBounds(true);
         this.physics.add.collider(this.hero, layer);
+        if (this.prop?.body) this.physics.add.collider(this.hero, this.prop);
         this.cameras.main.startFollow(this.hero, true);
         this.facing = 'down';
         playFacing(this.hero, 'idle', 'down');
@@ -96,6 +115,7 @@ if (!tilesets.length) {
       if ($('debug').checked) {
         this.layer.renderDebug(this.debug, { tileColor: null, collidingTileColor: new Phaser.Display.Color(240, 40, 60, 110) });
         if (this.hero) this.debug.lineStyle(1, 0xfac828, 1).strokeRectShape(this.hero.body);
+        if (this.prop?.body) this.debug.lineStyle(1, 0xf0283c, 1).strokeRect(this.prop.body.x, this.prop.body.y, this.prop.body.width, this.prop.body.height);
       }
     }
     update() {

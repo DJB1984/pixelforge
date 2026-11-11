@@ -229,6 +229,105 @@ export function pixelforgeTilemap(scene, name, { rows, legend, x = 0, y = 0 } = 
   return { map, tileset, layer, stopAnimation };
 }
 
+// Places a stamp (sprite.json "stamps": a prebuilt arrangement such as a house made from kit tiles,
+// or a whole sliced building from <prop>_tiles) with its top-left tile at (tx, ty). Empty cells keep
+// what's under them. Tiles marked `above` (a top-down roof) go on `above` if given: a layer drawn over
+// the characters, so they walk behind the roof. Properties and collision are re-applied. Returns the
+// tiles placed.
+export function stampPixelforgeTiles(layer, name, stamp, tx, ty, { above } = {}) {
+  const pf = layer.scene.cache.json.get(name)?.pixelforge;
+  const rows = pf?.stamps?.[stamp];
+  if (!rows) throw new Error(`pixelforge: tileset '${name}' has no stamp '${stamp}' (known: ${Object.keys(pf?.stamps ?? {}).join(', ')})`);
+  const firstgid = (l) => l.tileset.find((t) => t.image?.key === name)?.firstgid ?? 0;
+  const placed = [];
+  rows.forEach((row, y) => row.forEach((i, x) => {
+    if (i < 0) return;
+    const target = above && pf.properties[i]?.above ? above : layer;
+    placed.push(target.putTileAt(i + firstgid(target), tx + x, ty + y));
+  }));
+  applyPixelforgeTileProperties(layer, name);
+  if (above) applyPixelforgeTileProperties(above, name);
+  return placed;
+}
+
+// ---- props (sprite.json "type": "prop"): objects, buildings, background accents -------------
+// A prop's animations are its states (chest_closed, chest_open...). Its export carries how it sits in
+// the game: layer (back | world | front), scroll (parallax factor), solid + footprint (collision), and
+// ysort (top-down world props are drawn in order of their base, so characters walk behind them).
+//
+//   preload() { loadPixelforge(this, 'house'); }
+//   create()  {
+//     const house = addPixelforgeProp(this, 160, 120, 'house');       // (x, y) = its origin: the base
+//     this.physics.add.collider(hero, house);                         // solid props get a static body
+//   }
+//   update()  { hero.setDepth(hero.y); }                              // top-down: sort characters too
+
+const PROP_DEPTH = { back: -10000, world: 0, front: 10000 };
+
+// Depth for a prop: back-layer props sort by scroll (farther = lower), world props by their base
+// when they y-sort, front props above everything.
+export function pixelforgeDepth(sprite, info) {
+  if (info.layer === 'back') return PROP_DEPTH.back + info.scroll * 100;
+  if (info.layer === 'front') return PROP_DEPTH.front;
+  return info.ysort ? sprite.y : 0;
+}
+
+// Creates the prop at (x, y), plays `state` (default: its first animation), sets scroll factor and
+// depth, and gives solid props an Arcade static body covering the footprint (when the scene has
+// Arcade physics and `physics` isn't false). Returns the sprite; prop info is on sprite.pixelforge.
+export function addPixelforgeProp(scene, x, y, name, { state, physics = true } = {}) {
+  const pf = scene.cache.json.get(name)?.meta?.pixelforge;
+  if (!pf) throw new Error(`pixelforge: '${name}' isn't loaded (loadPixelforge(this, '${name}') in preload)`);
+  const info = pf.prop ?? { layer: 'world', scroll: 1, solid: false, ysort: false };
+  const keys = Object.keys(pf.animations);
+  if (!keys.every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
+  const solid = physics && info.solid && scene.physics?.add;
+  const sprite = solid ? scene.physics.add.staticSprite(x, y, name) : scene.add.sprite(x, y, name);
+  sprite.pixelforge = info;
+  const key = state ? `${name}_${state}` : keys[0];
+  if (key) sprite.play(key);
+  sprite.setScrollFactor(info.scroll);
+  sprite.setDepth(pixelforgeDepth(sprite, info));
+  if (solid) {
+    const b = pf.body;   // the footprint, in frame pixels
+    sprite.body.setSize(b.w, b.h, false).setOffset(b.x, b.y);
+  }
+  return sprite;
+}
+
+// Every frame, sets each sprite's depth to its y (its feet), so characters and y-sorted props overlap
+// correctly in a top-down game. `sprites` is an array or a function returning one. Returns a stop function.
+export function keepPixelforgeDepth(scene, sprites) {
+  const tick = () => { for (const s of (typeof sprites === 'function' ? sprites() : sprites)) if (s.active) s.setDepth(s.y); };
+  scene.events.on('update', tick);
+  return () => scene.events.off('update', tick);
+}
+
+// ---- UI: icon atlases ("type": "icons") and bitmap fonts ("type": "font") -------------------
+//   preload() { loadPixelforgeIcons(this, 'items'); loadPixelforgeFont(this, 'font'); }
+//   create()  {
+//     this.add.image(20, 20, 'items', 'potion');                       // any icon by name
+//     addPixelforgePanel(this, 160, 90, 'items', 'panel', 120, 48);   // nine-slice, stretched
+//     this.add.bitmapText(8, 8, 'font', 'HP 10/10');
+//   }
+
+export function loadPixelforgeIcons(scene, name, baseUrl = 'export/') {
+  scene.load.aseprite(name, `${baseUrl}${name}.png`, `${baseUrl}${name}.json`);   // a JSON-hash atlas, cached
+}
+
+// A nine-slice panel/button from an icon with "nine": [left, right, top, bottom] (Phaser 3.60+):
+// the corners stay crisp and only the edges and middle stretch.
+export function addPixelforgePanel(scene, x, y, name, icon, width, height) {
+  const nine = scene.cache.json.get(name)?.meta?.pixelforge?.nine?.[icon];
+  if (!nine) throw new Error(`pixelforge: icon '${icon}' in '${name}' has no "nine" insets`);
+  const [l, r, t, b] = nine;
+  return scene.add.nineslice(x, y, name, icon, width, height, l, r, t, b);
+}
+
+export function loadPixelforgeFont(scene, name, baseUrl = 'export/') {
+  scene.load.bitmapFont(name, `${baseUrl}${name}.png`, `${baseUrl}${name}.xml`);
+}
+
 // Debug overlay: call every frame with a Graphics object, e.g. in update():
 //   debug.clear(); drawPixelforgeBoxes(debug, [knight, ...enemies]);
 // Body box yellow, hurtboxes green, hitboxes red.

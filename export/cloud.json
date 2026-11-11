@@ -1,0 +1,100 @@
+{
+  "frames": {
+    "0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 19
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 19
+      },
+      "sourceSize": {
+        "w": 48,
+        "h": 19
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            2,
+            0,
+            42,
+            19
+          ]
+        ],
+        "hit": []
+      }
+    }
+  },
+  "meta": {
+    "app": "pixelforge",
+    "version": "1.0",
+    "image": "cloud.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 48,
+      "h": 19
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "cloud_idle",
+        "from": 0,
+        "to": 0,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [],
+    "slices": [],
+    "pixelforge": {
+      "sprite": "cloud",
+      "kind": "prop",
+      "view": "side",
+      "class": null,
+      "origin": [
+        24,
+        19
+      ],
+      "anchor": "feet",
+      "body": {
+        "x": 2,
+        "y": 0,
+        "w": 42,
+        "h": 19
+      },
+      "animations": {
+        "cloud_idle": {
+          "anim": "idle",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        }
+      },
+      "prop": {
+        "layer": "back",
+        "scroll": 0.3,
+        "solid": false,
+        "footprint": [
+          2,
+          0,
+          42,
+          19
+        ],
+        "ysort": false,
+        "tiles": null
+      }
+    }
+  }
+}

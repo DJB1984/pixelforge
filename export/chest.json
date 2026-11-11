@@ -1,0 +1,270 @@
+{
+  "frames": {
+    "0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            4,
+            14,
+            12
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "1": {
+      "frame": {
+        "x": 0,
+        "y": 17,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 120,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            4,
+            14,
+            12
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "2": {
+      "frame": {
+        "x": 17,
+        "y": 17,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 80,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            3,
+            14,
+            13
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "3": {
+      "frame": {
+        "x": 34,
+        "y": 17,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 200,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            0,
+            14,
+            16
+          ]
+        ],
+        "hit": []
+      }
+    },
+    "4": {
+      "frame": {
+        "x": 0,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            0,
+            14,
+            16
+          ]
+        ],
+        "hit": []
+      }
+    }
+  },
+  "meta": {
+    "app": "pixelforge",
+    "version": "1.0",
+    "image": "chest.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 50,
+      "h": 50
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "chest_closed",
+        "from": 0,
+        "to": 0,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "chest_opening",
+        "from": 1,
+        "to": 3,
+        "direction": "forward",
+        "color": "#000000ff"
+      },
+      {
+        "name": "chest_open",
+        "from": 4,
+        "to": 4,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [],
+    "slices": [],
+    "pixelforge": {
+      "sprite": "chest",
+      "kind": "prop",
+      "view": "topdown",
+      "class": null,
+      "origin": [
+        8,
+        16
+      ],
+      "anchor": "feet",
+      "body": {
+        "x": 1,
+        "y": 9,
+        "w": 14,
+        "h": 7
+      },
+      "animations": {
+        "chest_closed": {
+          "anim": "closed",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        },
+        "chest_opening": {
+          "anim": "opening",
+          "loop": false,
+          "fps": 8.0,
+          "frames": 3
+        },
+        "chest_open": {
+          "anim": "open",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        }
+      },
+      "prop": {
+        "layer": "world",
+        "scroll": 1.0,
+        "solid": true,
+        "footprint": [
+          1,
+          9,
+          14,
+          7
+        ],
+        "ysort": true,
+        "tiles": null
+      }
+    }
+  }
+}

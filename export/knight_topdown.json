@@ -1418,6 +1418,8 @@
     "slices": [],
     "pixelforge": {
       "sprite": "knight_topdown",
+      "kind": "sprite",
+      "view": "side",
       "class": "topdown",
       "origin": [
         32,

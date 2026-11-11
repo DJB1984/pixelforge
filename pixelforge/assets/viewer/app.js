@@ -71,10 +71,17 @@ const S = {
 let animators = [];
 
 const TYPES = [   // asset types the dashboard knows; new kinds slot in here
-  { type: 'sprite', label: 'Sprites', icon: 'box' },
-  { type: 'tileset', label: 'Tilesets', icon: 'tiles' },
+  { type: 'sprite', label: 'Sprites', icon: 'box', noun: 'sprite' },
+  { type: 'prop', label: 'Props & buildings', icon: 'box', noun: 'prop' },
+  { type: 'tileset', label: 'Tilesets', icon: 'tiles', noun: 'tileset', cells: 'tiles' },
+  { type: 'icons', label: 'UI & icons', icon: 'image', noun: 'icon set', cells: 'icons' },
+  { type: 'font', label: 'Fonts', icon: 'tiles', noun: 'font', cells: 'glyphs' },
 ];
 const typeLabel = (t) => TYPES.find((x) => x.type === t)?.label ?? 'Assets';
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const typeInfo = (a) => TYPES.find((x) => x.type === a?.type) ?? TYPES[0];
+// sprites and props have animations (a prop's are its states); the other kinds are grids of named cells
+const animated = (a) => a?.type === 'sprite' || a?.type === 'prop';
 
 // ---------- data ----------
 async function api(path, opts = {}) {
@@ -153,7 +160,7 @@ function targetText(t, withAsset = true) {
   if (t.tile) p.push(t.tile);
   if (t.map) p.push('sample map');
   if (t.region) p.push(`${t.region[2]}×${t.region[3]} spot`);
-  if (!withAsset && !p.length) p.push(`whole ${assetOf(t.asset)?.type === 'tileset' ? 'tileset' : 'sprite'}`);
+  if (!withAsset && !p.length) p.push(`whole ${typeInfo(assetOf(t.asset)).noun}`);
   return p.join(' › ');
 }
 const targetIcon = (t) => (t.region ? 'scan' : t.frame != null || t.tile ? 'image' : t.anim ? 'film' : t.map ? 'map' : 'box');
@@ -382,7 +389,7 @@ function paintThumb(canvas, c) {
   if (!a?.img) return;
   const src = document.createElement('canvas');
   let region = t.region, cw, ch;
-  if (a.type === 'sprite') {
+  if (animated(a)) {
     const anim = a.anims.find((x) => x.name === t.anim) ?? idleOf(a);
     const f = anim.frames[t.frame ?? 0];
     cw = a.w; ch = a.h;
@@ -401,7 +408,7 @@ function paintThumb(canvas, c) {
   if (region) {
     const pad = Math.max(6, Math.max(region[2], region[3]));
     [x0, y0, x1, y1] = [region[0] - pad, region[1] - pad, region[0] + region[2] + pad, region[1] + region[3] + pad];
-  } else if (a.type === 'sprite') {
+  } else if (animated(a)) {
     const px = src.getContext('2d').getImageData(0, 0, cw, ch).data;
     let mx = cw, my = ch, Mx = 0, My = 0;
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (px[(y * cw + x) * 4 + 3]) { mx = Math.min(mx, x); my = Math.min(my, y); Mx = Math.max(Mx, x + 1); My = Math.max(My, y + 1); }
@@ -441,7 +448,7 @@ function paintFit(canvas, a, { anim, fi = 0, tile, t = 0, size, crop = false, bo
   ctx.clearRect(0, 0, D, D);
   if (!a?.img) return;
   let sx, sy, bx = 0, by = 0, bw = a.w, bh = a.h;
-  if (a.type === 'sprite') {
+  if (animated(a)) {
     const f = (anim ?? idleOf(a)).frames[fi];
     sx = f.x; sy = f.y;
     if (box) [bx, by, bw, bh] = box;
@@ -504,6 +511,12 @@ function renderWatch() {
   }
 }
 
+function propChips(a) {
+  const p = a.prop;
+  const chips = [p.layer, p.solid ? 'solid' : '', p.scroll !== 1 ? `scroll ${p.scroll}` : '', p.slice ? `sliced ${p.slice[0]}×${p.slice[1]}` : ''];
+  return chips.filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('');
+}
+
 function renderTop() {
   const r = S.route;
   let crumbs = '', meta = '';
@@ -512,8 +525,8 @@ function renderTop() {
   else {
     const a = assetOf(r.name);
     crumbs = `<a href="#/">${typeLabel(a?.type)}</a><span class="sep">/</span><span class="here">${esc(r.name)}</span>`;
-    if (a?.type === 'sprite') meta = `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}<span class="chip num">${a.w}×${a.h}</span>`;
-    if (a?.type === 'tileset') meta = `<span class="chip num">${a.tiles.length} tiles</span><span class="chip num">${a.w}×${a.h}</span>`;
+    if (animated(a)) meta = `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}${a.prop ? propChips(a) : ''}<span class="chip num">${a.w}×${a.h}</span>`;
+    else if (a && a.type !== 'error') meta = `<span class="chip num">${a.tiles.length} ${typeInfo(a).cells}</span><span class="chip num">${a.w}×${a.h}</span>`;
   }
   $('#top').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb">${crumbs}</nav>` +
     (S.online ? `<div class="meta">${meta}</div>` : `<div class="offline">${icon('wifi', 'i-sm')}Can't reach pixelforge serve. Retrying…</div>`);
@@ -571,7 +584,7 @@ function wireCrits(root) {
 function openCrit(c) {
   const t = c.target, a = assetOf(t.asset);
   let hash = `#/a/${enc(t.asset)}`;
-  if (a?.type === 'sprite' && t.anim) hash += `/${enc(t.anim)}${t.frame != null ? `/${t.frame}` : ''}`;
+  if (animated(a) && t.anim) hash += `/${enc(t.anim)}${t.frame != null ? `/${t.frame}` : ''}`;
   else if (t.tile) hash += `/${enc(t.tile)}`;
   else if (t.map) hash += '/~map';
   if (location.hash === hash) {
@@ -605,8 +618,9 @@ function overviewPage(page) {
     html += `<section class="section"><div class="section-head"><h2>${t.label}</h2><span class="n">${items.length}</span></div><div class="grid">`;
     for (const a of items) {
       const n = activeCrits((c) => c.target.asset === a.name).length;
-      const sub = a.type === 'sprite' ? `${a.anims.length} animation${a.anims.length === 1 ? '' : 's'}${a.class ? ` · ${a.class}` : ''}`
-        : `${a.tiles.length} tiles · ${a.w}×${a.h}`;
+      const noun = a.type === 'prop' ? 'state' : 'animation';
+      const sub = animated(a) ? `${a.anims.length} ${noun}${a.anims.length === 1 ? '' : 's'}${a.class ? ` · ${a.class}` : ''}${a.prop ? ` · ${a.prop.layer}` : ''}`
+        : `${a.tiles.length} ${typeInfo(a).cells} · ${a.w}×${a.h}`;
       html += `<a class="tile" href="#/a/${enc(a.name)}"><div class="art"><canvas data-card="${esc(a.name)}"></canvas></div>
         <div class="info"><div><div class="nm">${esc(a.name)}</div><div class="sub">${esc(sub)}</div></div>
         ${n ? `<span class="badge">${n}</span>` : ''}</div></a>`;
@@ -622,7 +636,7 @@ function overviewPage(page) {
   wireCrits(page);
   for (const c of $$('canvas[data-card]', page)) {
     const a = assetOf(c.dataset.card);
-    if (a.type === 'sprite') {
+    if (animated(a)) {
       const anim = idleOf(a);
       const z = Math.max(1, Math.floor(Math.min(208 / a.w, 150 / a.h)));
       const p = { frame: 0, acc: 0 };
@@ -638,8 +652,12 @@ function overviewPage(page) {
       const z = Math.max(1, Math.round(168 / H));
       let last = -1;
       animators.push((dt, t) => { const k = Math.floor(t / 50); if (k !== last) { last = k; paintMap(c, a, t, { zoom: z }); } });
-    } else {
+    } else if (a.type === 'tileset') {
       paintTile(c, a, 0, 0, { zoom: 3, repeat: 3 });
+    } else {   // icons, glyphs: the first few side by side
+      const n = Math.min(a.tiles.length, 6), z = Math.max(1, Math.floor(Math.min(200 / (n * (a.w + 2)), 140 / a.h)));
+      const ctx = sizeCanvas(c, n * (a.w + 2) * z, a.h * z);
+      for (let i = 0; i < n; i++) { const [sx, sy] = slotXY(a, i); ctx.drawImage(a.img, sx, sy, a.w, a.h, i * (a.w + 2) * z, 0, a.w * z, a.h * z); }
     }
   }
 }
@@ -695,7 +713,7 @@ function assetPage(page) {
     return;
   }
   if (a.type === 'error') return errorPage(page, a);
-  if (a.type === 'sprite') spritePage(page, a);
+  if (animated(a)) spritePage(page, a);
   else tilesetPage(page, a);
 }
 
@@ -715,8 +733,8 @@ let stage = null;   // { draw, surface: { w, h, wrap, mapCell }, step, canStep }
 
 function spritePage(page, a) {
   const r = S.route;
-  if (r.sub === '~game') {
-    page.innerHTML = gameShell(`phaser.html?sprite=${enc(a.name)}&embed=1`);
+  if (r.sub === '~game' && hasGame(a)) {
+    page.innerHTML = gameShell(a.type === 'prop' ? `tilemap.html?prop=${enc(a.name)}&embed=1` : `phaser.html?sprite=${enc(a.name)}&embed=1`);
     renderSpriteTabs(a, null);
     stage = null;
     return;
@@ -825,14 +843,17 @@ function renderSpriteTabs(a, anim) {
     const nc = activeCrits((c) => c.target.asset === a.name && c.target.anim === x.name).length;
     return `<a class="tab ${anim === x ? 'on' : ''}" href="#/a/${enc(a.name)}/${enc(x.name)}">${esc(x.name)}
       ${nc ? `<span class="badge">${nc}</span>` : `<span class="n">${x.frames.length}</span>`}</a>`;
-  }).join('') + `<span class="spacer"></span><a class="tab ${anim ? '' : 'on'}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>`;
+  }).join('') + (hasGame(a) ? `<span class="spacer"></span><a class="tab ${anim ? '' : 'on'}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>` : '');
 }
+
+// characters spar in phaser.html; top-down props stand on a tileset's sample map in tilemap.html
+const hasGame = (a) => a.type !== 'prop' || (a.view !== 'side' && [...S.assets.values()].some((x) => x.type === 'tileset'));
 
 // tileset --------------------------------------------------------------
 function tilesetPage(page, a) {
   const r = S.route;
   const hasMap = a.sample.length > 0;
-  const view = r.sub === '~game' ? 'game' : (r.sub && r.sub !== '~map') ? 'tile' : hasMap ? 'map' : 'tile';
+  const view = r.sub === '~game' && a.type === 'tileset' ? 'game' : (r.sub && r.sub[0] !== '~') ? 'tile' : hasMap ? 'map' : 'tile';
   r.view = view;
   if (view === 'game') {
     page.innerHTML = gameShell(`tilemap.html?tileset=${enc(a.name)}&embed=1`);
@@ -854,8 +875,9 @@ function tilesetPage(page, a) {
       if (!S.view.zoom) S.view.zoom = fitZoom(W, H);
       paintMap(canvas, a, t, { zoom: S.view.zoom, grid: S.view.grid, marks: stageMarks((x) => x.map), sel: S.sel, ants });
     } else {
-      if (!S.view.zoom) S.view.zoom = fitZoom(a.w * 3, a.h * 3);
-      paintTile(canvas, a, ti, t, { zoom: S.view.zoom, grid: S.view.grid, marks: stageMarks((x) => x.tile === r.tile), sel: S.sel, ants });
+      const rep = a.type === 'tileset' ? 3 : 1;   // icons and glyphs don't repeat edge to edge
+      if (!S.view.zoom) S.view.zoom = fitZoom(a.w * rep, a.h * rep);
+      paintTile(canvas, a, ti, t, { zoom: S.view.zoom, repeat: rep, grid: S.view.grid, marks: stageMarks((x) => x.tile === r.tile), sel: S.sel, ants });
     }
     $('#zoom-read').textContent = `${S.view.zoom}×`;
   };
@@ -904,8 +926,8 @@ function renderTileTabs(a, view) {
   const nTiles = activeCrits((c) => c.target.asset === a.name && c.target.tile).length;
   const first = S.route.tile ?? a.tiles[0]?.name;
   el.innerHTML = (a.sample.length ? `<a class="tab ${view === 'map' ? 'on' : ''}" href="#/a/${enc(a.name)}/~map">${icon('map')}Sample map${nMap ? `<span class="badge">${nMap}</span>` : ''}</a>` : '') +
-    `<a class="tab ${view === 'tile' ? 'on' : ''}" href="#/a/${enc(a.name)}/${enc(first ?? '')}">${icon('tiles')}Tiles${nTiles ? `<span class="badge">${nTiles}</span>` : `<span class="n">${a.tiles.length}</span>`}</a>` +
-    `<span class="spacer"></span><a class="tab ${view === 'game' ? 'on' : ''}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>`;
+    `<a class="tab ${view === 'tile' ? 'on' : ''}" href="#/a/${enc(a.name)}/${enc(first ?? '')}">${icon('tiles')}${typeInfo(a).cells[0].toUpperCase() + typeInfo(a).cells.slice(1)}${nTiles ? `<span class="badge">${nTiles}</span>` : `<span class="n">${a.tiles.length}</span>`}</a>` +
+    (a.type === 'tileset' ? `<span class="spacer"></span><a class="tab ${view === 'game' ? 'on' : ''}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>` : '');
 }
 
 // stage controls -------------------------------------------------------
@@ -1070,9 +1092,10 @@ function scopesFor() {
   const r = S.route, a = assetOf(r.name);
   if (!a || a.type === 'error' || r.sub === '~game') return [];
   const spot = { id: 'spot', label: 'Spot', icon: 'scan', disabled: !S.sel, title: S.sel ? 'The marked spot' : 'Drag on the art to mark a spot' };
-  if (a.type === 'sprite') return [spot, { id: 'frame', label: 'Frame', icon: 'image' }, { id: 'anim', label: 'Animation', icon: 'film' }, { id: 'asset', label: 'Sprite', icon: 'box' }];
-  if (r.view === 'map') return [spot, { id: 'asset', label: 'Tileset', icon: 'tiles' }];
-  return [spot, { id: 'tile', label: 'Tile', icon: 'image' }, { id: 'asset', label: 'Tileset', icon: 'tiles' }];
+  const whole = { id: 'asset', label: cap(typeInfo(a).noun), icon: animated(a) ? 'box' : 'tiles' };
+  if (animated(a)) return [spot, { id: 'frame', label: 'Frame', icon: 'image' }, { id: 'anim', label: a.type === 'prop' ? 'State' : 'Animation', icon: 'film' }, whole];
+  if (r.view === 'map') return [spot, whole];
+  return [spot, { id: 'tile', label: cap(typeInfo(a).cells.replace(/s$/, '')), icon: 'image' }, whole];
 }
 
 function currentScope() {
@@ -1081,14 +1104,14 @@ function currentScope() {
   if (S.scope && ok(S.scope)) return S.scope;
   if (S.sel) return 'spot';
   const a = assetOf(S.route.name);
-  if (a?.type === 'sprite') return S.play.playing ? 'anim' : 'frame';
+  if (animated(a)) return S.play.playing ? 'anim' : 'frame';
   return S.route.view === 'map' ? 'asset' : list.length ? 'tile' : 'asset';
 }
 
 function targetFor(scope) {
   const r = S.route, a = assetOf(r.name);
   const t = { asset: a.name };
-  if (a.type === 'sprite') {
+  if (animated(a)) {
     const anim = a.anims.find((x) => x.name === r.sub) ?? idleOf(a);
     if (scope !== 'asset') t.anim = anim.name;
     if (scope === 'frame' || scope === 'spot') t.frame = S.play.frame;
@@ -1196,7 +1219,7 @@ function refreshCrits() {
 function refreshCritsLight() {
   const r = S.route, a = assetOf(r.name);
   if (!a || a.type === 'error') return;
-  if (a.type === 'sprite') {
+  if (animated(a)) {
     const anim = a.anims.find((x) => x.name === r.sub) ?? (r.sub === '~game' ? null : idleOf(a));
     renderSpriteTabs(a, anim);
     if (anim) $$('.fr', $('#strip')).forEach((el, k) => {
@@ -1254,7 +1277,7 @@ function render({ keep = false } = {}) {
   renderSelInfo();
   const a = assetOf(r.name);
   document.title = [r.page === 'asset' ? r.name : r.page === 'critiques' ? 'Critiques' : null, S.project?.game, 'pixelforge'].filter(Boolean).join(' · ');
-  if (a?.type === 'sprite' && r.sub && r.sub !== '~game' && !a.anims.some((x) => x.name === r.sub)) history.replaceState(null, '', `#/a/${enc(a.name)}`);
+  if (animated(a) && r.sub && r.sub !== '~game' && !a.anims.some((x) => x.name === r.sub)) history.replaceState(null, '', `#/a/${enc(a.name)}`);
 }
 
 addEventListener('hashchange', () => render());

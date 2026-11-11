@@ -64,5 +64,10 @@
       "ggfggggggggggtgggfgg",
       "####################"
     ]
+  },
+  "stamps": {
+    "pond": {"rows": ["~~~~~", "wwwww", "_____"]},
+    "garden": {"rows": ["fff", "ftf", "fff"]},
+    "path": {"rows": ["nnn", "ddd", "sss"]}
   }
 }

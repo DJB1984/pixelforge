@@ -84,7 +84,7 @@ class ServerTest(unittest.TestCase):
                 hero = next(a for a in proj["assets"] if a["name"] == "hero")
                 self.assertEqual([len(a["frames"]) for a in hero["anims"]], [2])
                 self.assertTrue(call(hero["sheet"]).startswith(b"\x89PNG"))
-                self.assertEqual(call("/live/index.json"), {"sprites": ["hero"], "tilesets": ["ground"]})
+                self.assertEqual(call("/live/index.json"), {"sprites": ["hero"], "props": [], "tilesets": ["ground"], "icons": [], "fonts": []})
                 rev = call("/api/state")["rev"]
 
                 c = call("/api/critiques", {"target": {"asset": "hero", "anim": "idle", "frame": 0}, "text": "wobbly"})

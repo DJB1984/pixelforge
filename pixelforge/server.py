@@ -2,7 +2,7 @@
 
 /                      -> /viewer/ (the dashboard)
 /viewer/*, /phaser/*   from the installed package
-/live/index.json       every sprite and tileset, built from the working tree (not export/)
+/live/index.json       every asset by kind, built from the working tree (not export/)
 /live/<name>.png|json  the same sheet + JSON `export` would write, rebuilt whenever the sources change
 /api/project           everything the dashboard draws, in one document
 /api/state             cheap poll: source revision, critiques, whether Claude is watching
@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import __version__
 from . import critiques as cq
-from .export import build_sheet, build_tileset
+from .export import INDEX_GROUPS, preview_build, prop_info
 from .model import ASSETS, Sprite, SpriteError, describe_entry, list_sprites, project_config, root, sprites_dir, to_hex
 
 
@@ -45,12 +45,12 @@ def _shared_files() -> list[Path]:
 
 def asset_sig(name: str) -> str:
     d = sprites_dir() / name
-    return _files_sig([*_shared_files(), d / "sprite.json", *sorted((d / "frames").glob("*.txt"))])
+    return _files_sig([*_shared_files(), d / "sprite.json", *sorted(d.glob("**/*.txt"))])   # frames, parts, glyphs
 
 
 def project_sig() -> str:
     return _files_sig([*_shared_files(), *sorted(sprites_dir().glob("*/sprite.json")),
-                       *sorted(sprites_dir().glob("*/frames/*.txt"))])
+                       *sorted(sprites_dir().glob("*/**/*.txt"))])
 
 
 class LiveBuilds:
@@ -67,7 +67,7 @@ class LiveBuilds:
             if hit and hit[0] == sig:
                 return hit
             s = Sprite.load(name)
-            img, data = (build_tileset if s.kind == "tileset" else build_sheet)(s, 1)
+            img, data = preview_build(s, 1)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             self._cache[name] = entry = (sig, buf.getvalue(), data, s)
@@ -78,13 +78,13 @@ BUILDS = LiveBuilds()
 
 
 def live_index() -> dict:
-    found: dict[str, list[str]] = {"sprites": [], "tilesets": []}
+    found: dict[str, list[str]] = {g: [] for g in INDEX_GROUPS}
     for n in list_sprites():
         try:
             kind = BUILDS.get(n)[3].kind
         except Exception:
             continue
-        found["tilesets" if kind == "tileset" else "sprites"].append(n)
+        found[{"prop": "props", "tileset": "tilesets", "icons": "icons", "font": "fonts"}.get(kind, "sprites")].append(n)
     return found
 
 
@@ -95,12 +95,12 @@ def _asset(name: str) -> dict:
         return {"name": name, "type": "error", "error": str(e)}
     base = {"name": name, "rev": sig, "sheet": f"/live/{name}.png?v={sig}", "w": s.width, "h": s.height,
             "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()]}
-    if s.kind == "tileset":
+    if s.tiled:   # tileset, icons, font: a grid of named cells
         pf = data["pixelforge"]
-        return {**base, "type": "tileset", "cols": data["columns"], "spacing": data["spacing"],
+        return {**base, "type": s.kind, "cols": data["columns"], "spacing": data["spacing"],
                 "tiles": [{"name": n, "props": p, "entry": describe_entry(s.tiles[i][1])}
                           for i, (n, p) in enumerate(zip(pf["names"], pf["properties"]))],
-                "sample": pf["sample"], "anims": pf["animations"]}
+                "sample": pf["sample"], "anims": pf["animations"], "stamps": pf.get("stamps", {})}
     frames = list(data["frames"].values())
     anims = []
     for tag in data["meta"]["frameTags"]:
@@ -113,8 +113,11 @@ def _asset(name: str) -> dict:
                         "active": a.active(i), "entry": describe_entry(a.frames[i])}
                        for i, f in enumerate(frames[tag["from"]:tag["to"] + 1])],
         })
-    return {**base, "type": "sprite", "class": s.size_class, "origin": list(s.origin), "anchor": s.anchor,
-            "body": list(s.body_rect()), "anims": anims}
+    out = {**base, "type": s.kind, "class": s.size_class, "origin": list(s.origin), "anchor": s.anchor,
+           "body": list(s.body_rect()), "anims": anims, "view": s.view}
+    if s.kind == "prop":
+        out["prop"] = {**prop_info(s), "slice": list(s.slice) if s.slice else None}
+    return out
 
 
 def project_data() -> dict:

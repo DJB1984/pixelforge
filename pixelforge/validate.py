@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from .boxes import frame_boxes
 from .grid import TRANSPARENT, Grid
-from .model import ROLES, Sprite, SpriteError, describe_entry, load_game_palette
+from .model import (ROLES, Sprite, SpriteError, describe_entry, game_resolution, load_game_palette,
+                    part_positions)
 
 MAX_PALETTE = 16
 BIG_DIFF_RATIO = 0.45
@@ -60,11 +61,17 @@ def check_sprite(name: str) -> list[Issue]:
 
     # ---- frame files ----
     used: set[str] = set()
+    used_parts: dict[str, list[tuple[int, int]]] = {}
 
     def collect(entry):
         if isinstance(entry, str):
             used.add(entry)
         elif isinstance(entry, dict):
+            if isinstance(entry.get("part"), str):
+                try:
+                    used_parts.setdefault(entry["part"], []).extend(part_positions(entry))
+                except SpriteError:
+                    used_parts.setdefault(entry["part"], [])
             if "from" in entry:
                 collect(entry["from"])
             for layer in entry.get("layers", []):
@@ -73,13 +80,44 @@ def check_sprite(name: str) -> list[Issue]:
     for a in s.animations.values():
         for e in a.frames:
             collect(e)
-    for name, e in s.tiles:
-        for fe, _ in s.tile_frames(name):
+    for tname, e in s.tiles:
+        for fe, _ in s.tile_frames(tname):
             collect(fe)
 
     for pattern in s.roles:
-        if not any(fnmatch.fnmatchcase(f, pattern) for f in s.frame_ids()):
-            issues.append(Issue("info", f"{name}/roles", f"pattern {pattern!r} matches no frame files"))
+        if not any(fnmatch.fnmatchcase(f, pattern) for f in s.frame_ids() + s.part_ids()):
+            issues.append(Issue("info", f"{name}/roles", f"pattern {pattern!r} matches no frame or part files"))
+
+    for pid in s.part_ids():
+        where = f"{name}/parts/{pid}.txt"
+        try:
+            g = s.load_part(pid)
+        except SpriteError as e:
+            issues.append(Issue("error", where, str(e).split(": ", 1)[-1]))
+            continue
+        bad = [(x, y) for y, r in enumerate(g.cells) for x, c in enumerate(r)
+               if c != TRANSPARENT and c not in s.palette]
+        if bad:
+            keys = sorted({g.cells[y][x] for x, y in bad})
+            issues.append(Issue("error", where, f"undefined palette keys {keys} at {_coords(bad)}"))
+        if pid in s.frame_ids():
+            issues.append(Issue("warn", where, f"frames/{pid}.txt has the same name; `paint`/`show @{pid}` "
+                                               f"pick the frame file"))
+        if pid not in used_parts:
+            issues.append(Issue("info", where, "not placed by any {\"part\": ...} entry"))
+            continue
+        off = [(x, y) for x, y in used_parts[pid]
+               if x + g.width <= 0 or y + g.height <= 0 or x >= s.width or y >= s.height]
+        cut = [(x, y) for x, y in used_parts[pid] if (x, y) not in off
+               and (x < 0 or y < 0 or x + g.width > s.width or y + g.height > s.height)]
+        if off:
+            issues.append(Issue("warn", where, f"placed entirely off the {s.width}x{s.height} canvas at {_coords(off)}"))
+        if cut:
+            issues.append(Issue("info", where, f"{g.width}x{g.height} part runs off the canvas edge at {_coords(cut)} "
+                                               f"(the overhang is cut)"))
+    for pid in sorted(set(used_parts) - set(s.part_ids())):
+        issues.append(Issue("error", f"{name}/parts/{pid}.txt", "placed by a {\"part\": ...} entry but the file "
+                                                                 "doesn't exist"))
 
     for fid in s.frame_ids():
         where = f"{name}/frames/{fid}.txt"
@@ -94,10 +132,12 @@ def check_sprite(name: str) -> list[Issue]:
             keys = sorted({g.cells[y][x] for x, y in bad})
             issues.append(Issue("error", where, f"undefined palette keys {keys} at {_coords(bad)}"))
         if fid not in used:
-            issues.append(Issue("info", where, "not used by any " + ("tile" if s.kind == "tileset" else "animation")))
+            issues.append(Issue("info", where, "not used by any " + ("tile" if s.tiled else "animation")))
 
-    if s.kind == "tileset":
+    if s.tiled:
         return issues + check_tiles(s)
+    if s.kind == "prop":
+        issues += check_prop(s)
 
     # ---- animations ----
     if not s.animations:
@@ -134,7 +174,7 @@ def check_sprite(name: str) -> list[Issue]:
             if a.active(i) and not boxes["hit"]:
                 issues.append(Issue("warn", f"{where}[{i}]", "marked active but has no pixels from a 'hit' layer "
                                                              "(check sprite.json roles)"))
-            if a.loop and boxes["hurt"]:
+            if a.loop and boxes["hurt"] and s.kind != "prop":   # a prop's body is its footprint
                 x, y, w, h = boxes["hurt"][0]
                 over = max(bx - x, by - y, (x + w) - (bx + bw), (y + h) - (by + bh))
                 if over > 2:
@@ -142,9 +182,11 @@ def check_sprite(name: str) -> list[Issue]:
                                                                  f"the body box {[bx, by, bw, bh]}"))
 
         # feet = lowest *body* pixel: weapons and effects (hit/none layers) may swing below the feet.
-        # Centre-anchored (overhead) sprites have no feet to plant, so these checks don't apply.
+        # Centre-anchored (overhead) sprites have no feet to plant, so these checks don't apply,
+        # and neither do they to props floating in the background (clouds, birds).
         bottoms = []
-        for i, g in valid if s.anchor == "feet" else []:
+        plants = s.anchor == "feet" and not (s.kind == "prop" and s.layer == "back")
+        for i, g in valid if plants else []:
             _, roles = s.resolve_roles(a.frames[i])
             body = [y for y, row in enumerate(roles.cells) if ROLES["hurt"] in row]
             bottoms.append(max(body) if body else g.bbox()[3])
@@ -181,6 +223,44 @@ def check_sprite(name: str) -> list[Issue]:
     return issues
 
 
+def check_prop(s: Sprite) -> list[Issue]:
+    """Props: the footprint has to fit, and the view decides what a sensible footprint is."""
+    issues: list[Issue] = []
+    name = s.name
+    if s.footprint:
+        x, y, w, h = s.footprint
+        if x < 0 or y < 0 or x + w > s.width or y + h > s.height:
+            issues.append(Issue("error", f"{name}/footprint", f"{list(s.footprint)} runs off the "
+                                                              f"{s.width}x{s.height} canvas"))
+        art = s.art_bounds()
+        if art and (x + w <= art[0] or art[0] + art[2] <= x or y + h <= art[1] or art[1] + art[3] <= y):
+            issues.append(Issue("warn", f"{name}/footprint", f"{list(s.footprint)} doesn't touch the art "
+                                                             f"{list(art)}: nothing visible would block"))
+    elif s.solid and s.view == "topdown":
+        issues.append(Issue("warn", f"{name}/footprint", "solid top-down prop without a footprint: all of its art "
+                                                         "blocks, so the player can't walk behind the roof or "
+                                                         "canopy. Set \"footprint\" to the base it stands on"))
+    if s.solid and s.layer != "world":
+        issues.append(Issue("warn", name, f"\"solid\" on a {s.layer!r}-layer prop; only world props collide"))
+    if s.layer == "world" and s.scroll != 1:
+        issues.append(Issue("info", name, f"scroll {s.scroll} on a world prop: it will drift against the ground "
+                                          f"it stands on (parallax accents belong on \"layer\": \"back\")"))
+    if s.slice:
+        tw, th = s.slice
+        if s.width % tw or s.height % th:
+            issues.append(Issue("info", f"{name}/slice", f"{s.width}x{s.height} isn't a whole number of "
+                                                         f"{tw}x{th} tiles; the last row/column is cut short"))
+    try:
+        rw, rh = game_resolution()
+    except SpriteError as e:
+        return issues + [Issue("error", "pixelforge.json", str(e))]
+    art = s.art_bounds()
+    if art and (art[2] > rw or art[3] > rh):
+        issues.append(Issue("warn", name, f"art is {art[2]}x{art[3]}, bigger than the game's {rw}x{rh} screen "
+                                          f"(pixelforge.json \"resolution\")"))
+    return issues
+
+
 def _lum(rgba) -> float:
     r, g, b, _ = rgba
     return 0.299 * r + 0.587 * g + 0.114 * b
@@ -204,16 +284,29 @@ def seams(s: Sprite, g: Grid) -> list[str]:
 def check_tiles(s: Sprite) -> list[Issue]:
     issues: list[Issue] = []
     name = s.name
+    noun = {"icons": "icon", "font": "glyph"}.get(s.kind, "tile")
+    for p in s.font_problems:
+        issues.append(Issue("error", f"{name}/glyphs", p))
     if not s.tiles:
-        issues.append(Issue("warn", name, "tileset has no tiles (add them to \"tiles\" in sprite.json)"))
+        where = {"icons": "\"icons\"", "font": "the glyph file"}.get(s.kind, "\"tiles\"")
+        issues.append(Issue("warn", name, f"{s.kind} has no {noun}s (add them to {where})"))
+    if s.kind == "font":
+        missing = [c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" if c not in s.glyph_widths]
+        if missing:
+            issues.append(Issue("info", name, f"no glyphs for {''.join(missing)}"))
     seen: set[str] = set()
     for i, (tname, entry) in enumerate(s.tiles):
-        where = f"{name}:tile {i} {tname!r}"
+        where = f"{name}:{noun} {i} {tname!r}"
         if tname in seen:
-            issues.append(Issue("error", where, "duplicate tile name; each tile needs its own"))
+            issues.append(Issue("error", where, f"duplicate {noun} name; each {noun} needs its own"))
         seen.add(tname)
         frames = s.tile_frames(tname)
         animated = tname in s.tile_anims
+        if animated and s.kind != "tileset":
+            issues.append(Issue("error", where, f"{s.kind} can't animate; make an animated pickup a prop instead"))
+        nine = s.item_meta.get(tname, {}).get("nine")
+        if nine and (nine[0] + nine[1] >= s.width or nine[2] + nine[3] >= s.height):
+            issues.append(Issue("error", where, f"nine {nine} leaves no middle to stretch in a {s.width}x{s.height} cell"))
         if animated and len(frames) == 1:
             issues.append(Issue("warn", where, "\"frames\" has a single frame, so it never animates"))
         if animated and any(ms <= 0 for _, ms in frames):
@@ -232,7 +325,9 @@ def check_tiles(s: Sprite) -> list[Issue]:
             grids.append(g)
             clear = g.width * g.height - g.opaque_count()
             if clear == g.width * g.height:
-                issues.append(Issue("warn", fwhere, "tile is empty"))
+                issues.append(Issue("warn", fwhere, f"{noun} is empty"))
+            elif s.kind != "tileset":
+                continue   # icons and glyphs sit on transparency and never repeat edge to edge
             elif clear:
                 if j == 0:
                     issues.append(Issue("info", fwhere, f"{clear} transparent pixels (fine for overlays such as "
@@ -258,6 +353,16 @@ def check_tiles(s: Sprite) -> list[Issue]:
         bad = sorted({c for r in rows for c in r if c not in legend and c not in " ."})
         if bad:
             issues.append(Issue("error", f"{name}/sample", f"characters not in the legend: {' '.join(bad)}"))
+    for sname in s.stamps:
+        try:
+            rows = s.stamp_map(sname)
+        except SpriteError as e:
+            issues.append(Issue("error", f"{name}/stamps/{sname}", str(e)))
+            continue
+        if len({len(r) for r in rows}) > 1:
+            issues.append(Issue("warn", f"{name}/stamps/{sname}", "rows have different lengths"))
+        if not any(i >= 0 for r in rows for i in r):
+            issues.append(Issue("warn", f"{name}/stamps/{sname}", "stamp is empty"))
     return issues
 
 

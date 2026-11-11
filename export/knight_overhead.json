@@ -454,6 +454,8 @@
     "slices": [],
     "pixelforge": {
       "sprite": "knight_overhead",
+      "kind": "sprite",
+      "view": "side",
       "class": "overhead",
       "origin": [
         32,

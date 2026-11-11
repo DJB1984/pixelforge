@@ -1,0 +1,17 @@
+{
+  "name": "cloud",
+  "type": "prop",
+  "view": "side",
+  "size": [48, 19],
+  "origin": [24, 19],
+  "scroll": 0.3,
+  "palette": {
+    "w": "white",
+    "h": "light_gray",
+    "s": "gray",
+    "l": "slate"
+  },
+  "animations": {
+    "idle": {"frames": ["cloud"]}
+  }
+}

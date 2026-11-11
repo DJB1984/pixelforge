@@ -13,7 +13,8 @@ Dashboard: `server.py` (`serve`: live builds from sprites/, `/api/project`, `/ap
 Inspection for an AI that sees stills, not motion: `motion.py` (per-frame measurements, spacing/timing notes,
 timeline chart) · `compare.py` (git ref vs working tree, pixel diff) · `context.py` (on real ground, grayscale, edge contrast).
 `pixelforge/assets/` ships with the package: `viewer/`, `phaser/pixelforge.js`, `gallery.html` template,
-default `game.json` palette, and `CLAUDE.md` (the per-game guide; keep it in sync with CLI changes).
+default `game.json` palette, `font_5x7.txt` (the starter font `new --font` copies), and `CLAUDE.md`
+(the per-game guide; keep it in sync with CLI changes).
 `project.py` handles `init`/`upgrade`. The per-game guide is the only managed file: pixelforge.json
 records its name and sha256 so `upgrade` replaces it only when unedited. This repo sets `"guide": null`,
 because its CLAUDE.md is this file, not a copy of the guide.

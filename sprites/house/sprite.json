@@ -1,0 +1,50 @@
+{
+  "name": "house",
+  "type": "prop",
+  "view": "topdown",
+  "size": [64, 80],
+  "origin": [32, 80],
+  "footprint": [2, 16, 60, 64],
+  "slice": [16, 16],
+  "palette": {
+    "k": "outline",
+    "q": "clay",
+    "r": "rust",
+    "R": "crimson",
+    "s": "sand",
+    "t": "tan",
+    "b": "brown",
+    "B": "dark_brown",
+    "e": "deep_brown",
+    "l": "gray",
+    "m": "slate",
+    "d": "dark_slate",
+    "u": "blue",
+    "c": "cyan",
+    "y": "yellow",
+    "a": "amber"
+  },
+  "animations": {
+    "closed": {"frames": [{"layers": [
+      "walls", "roof",
+      {"part": "chimney", "at": [46, 0]},
+      {"part": "dormer_wall", "at": [[9, 27], [40, 27]]},
+      {"part": "window", "at": [[8, 54], [44, 54], [11, 28], [42, 28]]},
+      {"part": "gable", "at": [[8, 18], [39, 18]]},
+      {"part": "door", "at": [26, 54]}]}]},
+    "open": {"frames": [{"layers": [
+      "walls", "roof",
+      {"part": "chimney", "at": [46, 0]},
+      {"part": "dormer_wall", "at": [[9, 27], [40, 27]]},
+      {"part": "window", "at": [[8, 54], [44, 54], [11, 28], [42, 28]]},
+      {"part": "gable", "at": [[8, 18], [39, 18]]},
+      {"part": "door_open", "at": [26, 54]}]}]},
+    "lit": {"frames": [{"layers": [
+      "walls", "roof",
+      {"part": "chimney", "at": [46, 0]},
+      {"part": "dormer_wall", "at": [[9, 27], [40, 27]]},
+      {"part": "window", "at": [[8, 54], [44, 54], [11, 28], [42, 28]], "replace": {"u": "a", "c": "y"}},
+      {"part": "gable", "at": [[8, 18], [39, 18]]},
+      {"part": "door", "at": [26, 54]}]}]}
+  }
+}
