@@ -107,3 +107,162 @@ check('side-view world props keep depth 0', pixelforgeDepth({ y: 5 }, { layer: '
 const panelScene = { cache: { json: { get: () => ({ meta: { pixelforge: { nine: { panel: [3, 4, 5, 6] } } } }) } },
   add: { nineslice: (...a) => a } };
 check('panel insets', addPixelforgePanel(panelScene, 1, 2, 'ui', 'panel', 80, 30), [1, 2, 'ui', 'panel', 80, 30, 3, 4, 5, 6]);
+
+// ---- loadPixelforgeAll: the index first, then every asset by kind from its filecomplete ----------
+import { loadPixelforgeAll, createPixelforgeAll, addPixelforgePlayer, pixelforgeView } from '../pixelforge/assets/phaser/pixelforge.js';
+{
+  const queued = [], handlers = {};
+  const json = {};
+  const loadScene = {
+    cache: { json: { get: (k) => json[k] }, tilemap: { exists: () => false }, audio: { exists: () => false } },
+    textures: { exists: (n) => n === 'already' },
+    load: {
+      on: (e, f) => { handlers[e] = f; }, off: (e) => { delete handlers[e]; },
+      json: (k, url) => queued.push(['json', k, url]), image: (k, url) => queued.push(['image', k, url]),
+      aseprite: (k, png, js) => queued.push(['aseprite', k, png, js]), bitmapFont: (k, png, xml) => queued.push(['font', k, png, xml]),
+      tilemapTiledJSON: (k, url) => queued.push(['level', k, url]), audio: (k, url) => queued.push(['audio', k, url]),
+    },
+  };
+  loadPixelforgeAll(loadScene, 'x/');
+  check('loadPixelforgeAll queues the index first', queued, [['json', 'pixelforge-index', 'x/index.json']]);
+  queued.length = 0;
+  handlers.filecomplete('other', 'json', {});
+  check('other files are ignored', queued, []);
+  handlers.filecomplete('pixelforge-index', 'json', { sprites: ['hero', 'already'], props: ['chest'], tilesets: ['terrain'],
+    icons: ['ui'], fonts: ['font'], levels: ['village'], sounds: ['coin'] });
+  check('then every asset by kind', queued, [
+    ['aseprite', 'hero', 'x/hero.png', 'x/hero.json'], ['aseprite', 'chest', 'x/chest.png', 'x/chest.json'],
+    ['image', 'terrain', 'x/terrain.png'], ['json', 'terrain', 'x/terrain.json'],
+    ['aseprite', 'ui', 'x/ui.png', 'x/ui.json'], ['font', 'font', 'x/font.png', 'x/font.xml'],
+    ['level', 'village', 'x/levels/village.json'], ['audio', 'coin', 'x/sounds/coin.wav']]);
+  check('the handler removes itself', 'filecomplete' in handlers, false);
+
+  const created = [];
+  json['pixelforge-index'] = { sprites: ['hero'], props: ['chest'] };
+  json.hero = { meta: { pixelforge: { animations: { hero_idle: {} } } } };
+  json.chest = { meta: { pixelforge: { animations: { chest_closed: {} } } } };
+  const animScene = { cache: { json: { get: (k) => json[k] } },
+    anims: { exists: (k) => k === 'chest_closed', createFromAseprite: (n) => { created.push(n); return []; } } };
+  createPixelforgeAll(animScene);
+  check('createPixelforgeAll makes the missing anims', created, ['hero']);
+}
+
+// ---- addPixelforgePlayer: a mock Arcade world, driven through controller.override ---------------
+function playerWorld(name, animations, pf = {}) {
+  const listeners = {};
+  const scene = {
+    events: { on: (e, f) => { listeners[e] = f; }, once: () => {}, off: (e) => { delete listeners[e]; } },
+    cache: { json: { get: () => ({ meta: { pixelforge: { animations, body: { x: 24, y: 18, w: 16, h: 30 }, view: 'side', ...pf } } }) } },
+    anims: { exists: () => true },
+    physics: { world: { gravity: { y: 0 } }, add: { sprite: (x, y) => mockSprite(scene, x, y, name) } },
+  };
+  const tick = (t) => listeners.update(t, 16);
+  return { scene, tick, listeners };
+}
+function mockSprite(scene, x, y, name) {
+  const ev = {};
+  const s = {
+    scene, x, y, active: true, flipX: false, rotation: 0, depth: 0, emitted: [], texture: { key: name },
+    anims: { currentAnim: null },
+    play(k) { s.anims.currentAnim = { key: typeof k === 'string' ? k : k.key }; return s; },
+    setFlipX(f) { s.flipX = f; return s; }, setDepth(d) { s.depth = d; return s; }, setRotation(r) { s.rotation = r; return s; },
+    setCollideWorldBounds() { return s; },
+    on(e, f) { ev[e] = f; return s; }, once() { return s; }, emit(e) { s.emitted.push(e); },
+    body: { velocity: { x: 0, y: 0 }, blocked: { down: true }, touching: { down: false }, size: null, offset: null, circle: null, gravity: 0,
+      setSize(w, h) { this.size = [w, h]; return this; }, setOffset(ox, oy) { this.offset = [ox, oy]; return this; },
+      setCircle(r, ox, oy) { this.circle = [r, ox, oy]; return this; }, setAllowGravity() { return this; },
+      setGravityY(g) { this.gravity = g; return this; },
+      setVelocityX(v) { this.velocity.x = v; return this; }, setVelocityY(v) { this.velocity.y = v; return this; },
+      setVelocity(vx, vy) { this.velocity.x = vx; this.velocity.y = vy; return this; } },
+  };
+  return s;
+}
+{
+  const anims = { p_idle: {}, p_walk: {}, p_run: {}, p_jump_rise: {}, p_jump_fall: {}, p_jump_land: {} };
+  const { scene, tick } = playerWorld('p', anims);
+  const p = addPixelforgePlayer(scene, 50, 100, 'p');
+  const c = p.controller, body = p.body;
+  check('side: body box from the export', [body.size, body.offset], [[16, 30], [24, 18]]);
+  check('side: gravity on the body (world has none)', body.gravity, 900);
+  check('side: starts idle', p.anims.currentAnim.key, 'p_idle');
+  tick(0);
+  check('no keyboard, no override: no input', c.input, { left: false, right: false, up: false, down: false, jump: false, run: false, attack: false });
+  c.override = { right: true };
+  tick(16);
+  check('override right: walks', [body.velocity.x, p.anims.currentAnim.key, c.facing], [70, 'p_walk', 'right']);
+  c.override = { left: true, run: true };
+  tick(32);
+  check('override left+run: runs left, flipped', [body.velocity.x, p.anims.currentAnim.key, p.flipX], [-135, 'p_run', true]);
+  c.override = { jump: true };
+  tick(48);
+  check('jump: up velocity and event', [body.velocity.y, p.emitted.includes('pixelforge-jump')], [-330, true]);
+  body.blocked.down = false;
+  tick(64);
+  check('rising: jump_rise', p.anims.currentAnim.key, 'p_jump_rise');
+  c.override = {};
+  tick(80);
+  check('released early: short hop', body.velocity.y, -110);
+  body.velocity.y = 50;
+  tick(96);
+  check('falling: jump_fall', p.anims.currentAnim.key, 'p_jump_fall');
+  body.blocked.down = true; body.velocity.y = 0;
+  tick(112);
+  check('landing: jump_land and event', [p.anims.currentAnim.key, p.emitted.includes('pixelforge-land')], ['p_jump_land', true]);
+  c.override = { right: true };
+  tick(128);
+  check('moving cancels the landing pose', p.anims.currentAnim.key, 'p_walk');
+
+  // coyote time: walked off a ledge 80ms ago -> still jumps; 200ms ago -> doesn't
+  c.override = {};
+  tick(1000);
+  body.blocked.down = false;
+  tick(1060);
+  c.override = { jump: true };
+  body.velocity.y = 0;
+  tick(1080);
+  check('coyote: a jump 80ms after leaving the ground counts', body.velocity.y, -330);
+  c.override = {};
+  body.blocked.down = true; tick(2000);
+  body.blocked.down = false; tick(2016);
+  body.velocity.y = 0;
+  c.override = { jump: true }; tick(2200);
+  check('coyote: 200ms after leaving the ground does not', body.velocity.y, 0);
+  // jump buffer: pressed 60ms before landing -> jumps on landing (still held)
+  c.override = {}; tick(2300);
+  c.override = { jump: true }; tick(2340);
+  body.blocked.down = true; tick(2400);
+  check('buffer: a press 60ms before landing jumps on landing', body.velocity.y, -330);
+  body.blocked.down = false; body.velocity.y = 0;
+  c.override = {}; tick(3000);
+  c.override = { jump: true }; tick(3040);
+  check('in the air: a press does not jump', body.velocity.y, 0);
+  body.blocked.down = true; tick(3300);
+  check('buffer: a press 260ms before landing does not', body.velocity.y, 0);
+}
+{
+  const anims = { t_idle_down: {}, t_walk_down: {}, t_idle_side: {}, t_walk_side: {}, t_idle_up: {}, t_walk_up: {},
+                  t_attack_side: {}, t_attack_down: {} };
+  const { scene, tick } = playerWorld('t', anims);
+  check('topdown view inferred from walk_down', pixelforgeView(scene, 't'), 'topdown');
+  const p = addPixelforgePlayer(scene, 50, 100, 't');
+  check('topdown: feet-only body', [p.body.size, p.body.offset], [[12, 8], [26, 40]]);
+  p.controller.override = { left: true };
+  tick(0);
+  check('topdown: walk left = side flipped', [p.anims.currentAnim.key, p.flipX, p.body.velocity.x], ['t_walk_side', true, -70]);
+  p.y = 123; p.controller.override = { up: true }; tick(16);
+  check('topdown: walk up, depth = y', [p.anims.currentAnim.key, p.depth], ['t_walk_up', 123]);
+  p.controller.override = { down: true }; tick(32);
+  p.controller.override = { attack: true }; tick(48);
+  check('topdown: attack in the facing direction, standing still', [p.anims.currentAnim.key, p.body.velocity.y], ['t_attack_down', 0]);
+}
+{
+  const { scene, tick } = playerWorld('o', { o_idle: {}, o_walk: {}, o_attack: {} }, { anchor: 'center', body: { x: 24, y: 24, w: 16, h: 16 } });
+  check('overhead view from the centre anchor', pixelforgeView(scene, 'o'), 'overhead');
+  const p = addPixelforgePlayer(scene, 0, 0, 'o');
+  check('overhead: circle body', p.body.circle, [8, 24, 24]);
+  p.controller.override = { down: true, right: true }; tick(0);
+  check('overhead: diagonal at the same speed, rotated to face it',
+    [Math.round(p.body.velocity.x), Math.round(p.body.velocity.y), Math.round(p.rotation * 1000) / 1000, p.anims.currentAnim.key],
+    [49, 49, 0.785, 'o_walk']);
+  check('state() for playtests', p.controller.state(), { x: 0, y: 0, vx: 49.5, vy: 49.5, onGround: true, facing: 45, anim: 'o_walk' });
+}

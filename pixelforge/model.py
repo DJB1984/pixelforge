@@ -293,7 +293,8 @@ class Sprite:
         kind = meta.get("type", "sprite")
         if kind not in KINDS:
             raise SpriteError(f"type {kind!r} must be one of {', '.join(KINDS)}")
-        view = meta.get("view") or game_view()
+        # the topdown/overhead classes are only for those views, so they imply it
+        view = meta.get("view") or (size_class if size_class in ("topdown", "overhead") else game_view())
         if view not in VIEWS:
             raise SpriteError(f"view {view!r} must be one of {', '.join(VIEWS)}")
         item_meta: dict[str, dict] = {}

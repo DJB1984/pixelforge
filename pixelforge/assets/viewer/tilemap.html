@@ -21,14 +21,14 @@
   <label>Walker <select id="walker"></select></label>
   <label class="pr">Prop <select id="prop"></select></label>
   <label><input type="checkbox" id="debug"> Show colliding tiles and footprints</label>
-  <span>Arrows or WASD to walk</span>
+  <span>Arrows or WASD to walk · X attack</span>
   <span id="info"></span>
 </div>
 <div id="game"></div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script type="module">
-import { loadPixelforge, createPixelforgeAnims, loadPixelforgeTiles, pixelforgeTilemap, pixelforgeTileIndex,
-         pixelforgeBody, playFacing, addPixelforgeProp } from '../phaser/pixelforge.js';
+import { loadPixelforge, loadPixelforgeTiles, pixelforgeTilemap, pixelforgeTileIndex,
+         addPixelforgePlayer, addPixelforgeProp, pixelforgeView } from '../phaser/pixelforge.js';
 
 const BASE = '../live/';   // live builds from `pixelforge serve`: the working tree, not the last export
 const index = await (await fetch(`${BASE}index.json`, { cache: 'no-store' })).json();
@@ -55,7 +55,7 @@ if (!tilesets.length) {
     }
     create() {
       // any top-down character (has walk_down) can walk the map
-      const walkers = index.sprites.filter((n) => this.cache.json.get(n).meta.frameTags.some((t) => t.name === `${n}_walk_down`));
+      const walkers = index.sprites.filter((n) => pixelforgeView(this, n) === 'topdown');
       const heroName = walkers.includes(params.get('walker')) ? params.get('walker') : walkers[0];
       fill($('walker'), walkers, heroName);
 
@@ -83,7 +83,6 @@ if (!tilesets.length) {
       }
 
       if (heroName) {
-        createPixelforgeAnims(this, heroName);
         // start on the walkable tile nearest the middle of the map (just below a prop's footprint)
         const cx = map.width / 2, cy = blocked ? (blocked.y + blocked.h) / map.tileHeight + 0.5 : map.height / 2;
         const inside = (t) => blocked && t.pixelX < blocked.x + blocked.w && blocked.x < t.pixelX + t.width
@@ -92,19 +91,14 @@ if (!tilesets.length) {
         layer.forEachTile((t) => { if (t.index >= 0 && !t.collides && !inside(t)) spots.push(t); });
         spots.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
         const start = spots[0] ?? { pixelX: 0, pixelY: 0 };
-        this.hero = this.physics.add.sprite(start.pixelX + map.tileWidth / 2, start.pixelY + map.tileHeight - 2, heroName);
-        // Top-down: collide with the feet only, so the head can overlap a wall's top edge.
-        const b = pixelforgeBody(this, heroName);
-        this.hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8);
-        this.hero.setCollideWorldBounds(true);
+        // the game's own top-down controller: feet-only body, playFacing, attack_<dir>, depth = y
+        this.hero = addPixelforgePlayer(this, start.pixelX + map.tileWidth / 2, start.pixelY + map.tileHeight - 2, heroName,
+                                        { view: 'topdown' });
         this.physics.add.collider(this.hero, layer);
         if (this.prop?.body) this.physics.add.collider(this.hero, this.prop);
         this.cameras.main.startFollow(this.hero, true);
-        this.facing = 'down';
-        playFacing(this.hero, 'idle', 'down');
         window.pixelforgeHero = this.hero;
       }
-      this.keys = this.input.keyboard.addKeys('UP,DOWN,LEFT,RIGHT,W,A,S,D');
       $('debug').onchange = () => this.drawDebug();
       this.drawDebug();
       const w = Math.min(window.innerWidth, map.widthInPixels * ZOOM), h = Math.min(window.innerHeight - 120, map.heightInPixels * ZOOM);
@@ -129,15 +123,7 @@ if (!tilesets.length) {
         $('info').textContent = `tile ${pixelforgeTileIndex(this, tsName, name)} ${name} at (${t.x}, ${t.y})${anim}` +
           (Object.keys(props).length ? '  ' + Object.entries(props).map(([k, v]) => `${k}=${v}`).join(' ') : '');
       }
-      if (!this.hero) return;
-      const k = this.keys, speed = 70;
-      const vx = (k.RIGHT.isDown || k.D.isDown) - (k.LEFT.isDown || k.A.isDown);
-      const vy = (k.DOWN.isDown || k.S.isDown) - (k.UP.isDown || k.W.isDown);
-      this.hero.setVelocity(vx * speed, vy * speed);
-      if (vx || vy) this.facing = vx ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
-      playFacing(this.hero, vx || vy ? 'walk' : 'idle', this.facing);
-      this.hero.setDepth(this.hero.y);
-      if ($('debug').checked) this.drawDebug();
+      if (this.hero && $('debug').checked) this.drawDebug();
     }
   }
 

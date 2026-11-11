@@ -1425,7 +1425,7 @@
     "pixelforge": {
       "sprite": "knight_topdown",
       "kind": "sprite",
-      "view": "side",
+      "view": "topdown",
       "class": "topdown",
       "origin": [
         32,

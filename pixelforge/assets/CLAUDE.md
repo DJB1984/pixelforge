@@ -213,6 +213,8 @@ create()  {
 }
 update()  { debug.clear(); drawPixelforgeBoxes(debug, [knight, ...enemies]); }       // optional overlay
 ```
+- Load everything at once with `loadPixelforgeAll(this)` in preload (it reads `export/index.json` and queues every
+  sprite, prop, tileset, icon atlas, font, level and sound) and `createPixelforgeAll(this)` in create (every animation).
 - `createPixelforgeAnims` wraps `this.anims.createFromAseprite` and restores `loop` (Phaser otherwise plays every tag once).
 - Face left with `sprite.setFlipX(true)`. Boxes mirror with it.
 - Top-down: `playFacing(sprite, 'walk', 'left' | 'right' | 'up' | 'down')` picks `<sprite>_walk_<down|up|side>` and sets the flip.
@@ -255,4 +257,25 @@ create()  {
 ```
 - A sliced building is also a tileset: `loadPixelforgeTiles(this, 'house_tiles')`, then `stampPixelforgeTiles(layer, 'house_tiles', 'house', tx, ty, { above })`, or paint it in Tiled.
 - `/viewer/tilemap.html?prop=house` (a top-down prop's "In game" tab) stands the prop on a tileset's sample map, so you can walk around it, into its footprint and behind its roof.
-- For top-down characters, collide with the feet only: `hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8)` with `b = pixelforgeBody(...)`, so the head can overlap the top of a wall.
+- For top-down characters, collide with the feet only: `hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8)` with `b = pixelforgeBody(...)`, so the head can overlap the top of a wall. `addPixelforgePlayer` does this for you.
+
+## Phaser: the player
+Don't write a movement controller. `addPixelforgePlayer` is the one the dashboard, the playtests and the game
+all use, so what you test is what ships:
+```js
+import { addPixelforgePlayer } from './export/pixelforge.js';
+const hero = addPixelforgePlayer(this, 80, 160, 'princess', { run: 150, jump: 340 });   // (x, y) = its origin
+this.physics.add.collider(hero, groundLayer);
+hero.on('pixelforge-land', () => this.cameras.main.shake(60, 0.002));   // also pixelforge-jump, pixelforge-attack
+```
+- The view comes from the sprite's export (the `topdown` and `overhead` classes imply theirs), or pass `{view}`.
+  - **side:** walk, run (Shift), jump with coyote time, a jump buffer and variable height (release early for a hop).
+    Animations: `idle`, `walk`, `run`, `jump_rise`, `jump_fall`, `jump_land` and `attack`. A missing one falls back to a
+    simpler one (`run` → `walk` → `idle`). Options: `speed` 70, `run` 135, `jump` 330, `gravity` 900 (the player's
+    total, whatever the world's), `coyote` 90 and `buffer` 120 (ms).
+  - **topdown:** 4 directions with `playFacing`, a feet-only body, `attack_<down|up|side>`, and depth = y. Option `speed`.
+  - **overhead:** 8 directions, rotated to face where it walks, a circle body from the body box, and `attack`.
+- Keys: arrows/WASD to move, Space/Up/W to jump, Shift to run, X/J to attack. They fill `hero.controller.input`.
+  Set `hero.controller.override = {right: true, run: true}` to drive it from code (cutscenes, playtests).
+  `null` hands control back to the keyboard.
+- `hero.controller.state()` returns `{x, y, vx, vy, onGround, facing, anim}`.

@@ -734,9 +734,11 @@ let stage = null;   // { draw, surface: { w, h, wrap, mapCell }, step, canStep }
 function spritePage(page, a) {
   const r = S.route;
   if (r.sub === '~game' && hasGame(a)) {
-    // props walk the tilemap; characters that jump get the platformer playground; the rest spar with dummies
+    // top-down props walk the tilemap, side-view props stand in the platformer; characters that jump
+    // get the platformer playground; the rest spar with dummies
     const jumps = a.anims.some((x) => /^jump(_|$)/.test(x.name));
-    const src = a.type === 'prop' ? `tilemap.html?prop=${enc(a.name)}` : `${jumps ? 'platformer' : 'phaser'}.html?sprite=${enc(a.name)}`;
+    const src = a.type === 'prop' ? `${a.view === 'side' ? 'platformer' : 'tilemap'}.html?prop=${enc(a.name)}`
+      : `${jumps ? 'platformer' : 'phaser'}.html?sprite=${enc(a.name)}`;
     page.innerHTML = gameShell(`${src}&embed=1`);
     renderSpriteTabs(a, null);
     stage = null;
@@ -849,8 +851,9 @@ function renderSpriteTabs(a, anim) {
   }).join('') + (hasGame(a) ? `<span class="spacer"></span><a class="tab ${anim ? '' : 'on'}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>` : '');
 }
 
-// characters spar in phaser.html; top-down props stand on a tileset's sample map in tilemap.html
-const hasGame = (a) => a.type !== 'prop' || (a.view !== 'side' && [...S.assets.values()].some((x) => x.type === 'tileset'));
+// characters spar in phaser.html; top-down props stand on a tileset's sample map in tilemap.html,
+// side-view props on the platformer's ground
+const hasGame = (a) => a.type !== 'prop' || a.view === 'side' || [...S.assets.values()].some((x) => x.type === 'tileset');
 
 // tileset --------------------------------------------------------------
 function tilesetPage(page, a) {

@@ -455,7 +455,7 @@
     "pixelforge": {
       "sprite": "knight_overhead",
       "kind": "sprite",
-      "view": "side",
+      "view": "overhead",
       "class": "overhead",
       "origin": [
         32,

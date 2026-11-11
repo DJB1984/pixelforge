@@ -55,12 +55,12 @@ work branch. Don't merge to `main` or tag unless the user says to. Ask at the en
 Everything after this (level Play tab, game starter, playtests) uses one player controller and one loader, so the
 dashboard, the playtest and the real game behave identically.
 
-- [ ] **`loadPixelforgeAll(scene, baseUrl = 'export/')`**: queues `index.json`, then, in its `filecomplete`
+- [x] **`loadPixelforgeAll(scene, baseUrl = 'export/')`**: queues `index.json`, then, in its `filecomplete`
   handler, every asset by kind. `sprites`/`props` use `loadPixelforge`, `tilesets` use `loadPixelforgeTiles`,
   `icons` `loadPixelforgeIcons`, `fonts` `loadPixelforgeFont`, and later `levels` and `sounds`. Adding files during
   a load is supported in Phaser 3. Also add **`createPixelforgeAll(scene)`**, which creates the anims for every
   sprite and prop in the cached index.
-- [ ] **`addPixelforgePlayer(scene, x, y, name, opts)`** returns the sprite with `.controller`. It reads
+- [x] **`addPixelforgePlayer(scene, x, y, name, opts)`** returns the sprite with `.controller`. It reads
   `opts.view` (default: the export's `meta.pixelforge.view`) and has three modes:
   - **side**: lift the logic out of `assets/viewer/platformer.html`: walk/run (Shift), coyote time, jump buffer,
     variable jump height, and animation choice from motion (`idle/walk/run/jump_rise/jump_fall/jump_land/attack`,
@@ -72,13 +72,13 @@ dashboard, the playtest and the real game behave identically.
     (arrows/WASD, Space/Up/W jump, Shift run, X/J attack) **unless `controller.override` is set**. The override is
     how playtests drive it.
   - Emits `pixelforge-land`, `pixelforge-attack`, `pixelforge-jump`.
-- [ ] Refactor `platformer.html` and `tilemap.html` to use `addPixelforgePlayer`, so behaviour stays the same and
+- [x] Refactor `platformer.html` and `tilemap.html` to use `addPixelforgePlayer`, so behaviour stays the same and
   the inline controller code goes away.
   - `platformer.html` also gains `?prop=` (stand a side-view prop on its ground) so side-view props get an
     "In game" tab. Update `hasGame()` in `app.js`: side-view props → `platformer.html?prop=`.
-- [ ] Node tests: loader queues the right files from a mock index; controller picks anims from velocity/onGround;
+- [x] Node tests: loader queues the right files from a mock index; controller picks anims from velocity/onGround;
   the override replaces keyboard input; coyote/buffer timing.
-- [ ] Guide: a "Phaser: the player" section; update the Phaser usage block.
+- [x] Guide: a "Phaser: the player" section; update the Phaser usage block.
 
 **Done when** both viewer pages play exactly as before (check in Chrome), the knight and the princess both work,
 and the tests pass.

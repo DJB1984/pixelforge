@@ -328,6 +328,281 @@ export function loadPixelforgeFont(scene, name, baseUrl = 'export/') {
   scene.load.bitmapFont(name, `${baseUrl}${name}.png`, `${baseUrl}${name}.xml`);
 }
 
+// ---- everything at once: export/index.json ----------------------------------------------------
+//   preload() { loadPixelforgeAll(this); }          // every sprite, prop, tileset, icon atlas, font...
+//   create()  { createPixelforgeAll(this); }        // ...and every animation
+// The index is loaded first; its filecomplete handler queues the rest (Phaser lets a loader grow
+// while it runs). The parsed index stays in the JSON cache as 'pixelforge-index'.
+
+export const PIXELFORGE_INDEX = 'pixelforge-index';
+
+export function loadPixelforgeAll(scene, baseUrl = 'export/') {
+  const cached = scene.cache.json.get(PIXELFORGE_INDEX);
+  if (cached) return queuePixelforgeIndex(scene, cached, baseUrl);
+  const onFile = (key, type, data) => {
+    if (key !== PIXELFORGE_INDEX) return;
+    scene.load.off('filecomplete', onFile);
+    queuePixelforgeIndex(scene, data, baseUrl);
+  };
+  scene.load.on('filecomplete', onFile);
+  scene.load.json(PIXELFORGE_INDEX, `${baseUrl}index.json`);
+}
+
+// Queues every asset an index lists (skipping ones already loaded). Returns the names queued.
+export function queuePixelforgeIndex(scene, index, baseUrl = 'export/') {
+  const queued = [];
+  const each = (group, load, loaded) => {
+    for (const name of index?.[group] ?? []) {
+      if (loaded(name)) continue;
+      load(scene, name, baseUrl);
+      queued.push(name);
+    }
+  };
+  const tex = (n) => scene.textures?.exists(n);
+  each('sprites', loadPixelforge, tex);
+  each('props', loadPixelforge, tex);
+  each('tilesets', loadPixelforgeTiles, tex);
+  each('icons', loadPixelforgeIcons, tex);
+  each('fonts', loadPixelforgeFont, tex);
+  each('levels', loadPixelforgeLevel, (n) => scene.cache.tilemap?.exists(n));
+  each('sounds', loadPixelforgeSound, (n) => scene.cache.audio?.exists(n));
+  return queued;
+}
+
+// A level (export/levels/<name>.json, a Tiled map with its tilesets embedded). pixelforgeLevel builds it.
+export function loadPixelforgeLevel(scene, name, baseUrl = 'export/') {
+  scene.load.tilemapTiledJSON(name, `${baseUrl}levels/${name}.json`);
+}
+
+// A sound effect (export/sounds/<name>.wav): scene.sound.play(name).
+export function loadPixelforgeSound(scene, name, baseUrl = 'export/') {
+  scene.load.audio(name, `${baseUrl}sounds/${name}.wav`);
+}
+
+// Animations for every sprite and prop in the loaded index. Returns their names.
+export function createPixelforgeAll(scene) {
+  const index = scene.cache.json.get(PIXELFORGE_INDEX) ?? {};
+  const names = [...(index.sprites ?? []), ...(index.props ?? [])];
+  for (const name of names) {
+    const tags = Object.keys(scene.cache.json.get(name)?.meta?.pixelforge?.animations ?? {});
+    if (!tags.every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
+  }
+  return names;
+}
+
+// ---- the player --------------------------------------------------------------------------------
+// One controller for the dashboard, the playtests and the real game, so they all play the same:
+//
+//   const hero = addPixelforgePlayer(this, 80, 160, 'princess');      // view from the export
+//   this.physics.add.collider(hero, groundLayer);
+//   hero.on('pixelforge-land', () => dust());                          // also pixelforge-jump, -attack
+//
+// side:     walk, run (Shift), coyote time, jump buffer, variable jump height; idle/walk/run/
+//           jump_rise/jump_fall/jump_land/attack picked from the motion (each falls back to a simpler one)
+// topdown:  4-direction walk with playFacing, feet-only body, attack_<dir>, depth = y
+// overhead: 8-direction, rotated to face where it goes, circle body from the body box, attack
+// Input: sprite.controller.input = {left, right, up, down, jump, run, attack}, read from the keyboard
+// (arrows/WASD, Space/Up/W jump, Shift run, X/J attack) unless controller.override is set: an object
+// of the same keys (missing ones are false). Playtests drive the player that way.
+
+export const PLAYER_DEFAULTS = {
+  side: { speed: 70, run: 135, jump: 330, gravity: 900, coyote: 90, buffer: 120 },
+  topdown: { speed: 70 },
+  overhead: { speed: 70 },
+};
+const NO_INPUT = { left: false, right: false, up: false, down: false, jump: false, run: false, attack: false };
+const INPUT_KEYS = { left: ['LEFT', 'A'], right: ['RIGHT', 'D'], up: ['UP', 'W'], down: ['DOWN', 'S'],
+                     jump: ['SPACE'], run: ['SHIFT'], attack: ['X', 'J'] };
+
+// Which controller a sprite gets: its export's view (the topdown and overhead classes imply theirs).
+export function pixelforgeView(scene, name) {
+  const pf = scene.cache.json.get(name)?.meta?.pixelforge ?? {};
+  if (pf.anchor === 'center') return 'overhead';
+  if (`${name}_walk_down` in (pf.animations ?? {})) return 'topdown';
+  return pf.view ?? 'side';
+}
+
+export class PixelforgeController {
+  constructor(sprite, name, view, opts = {}) {
+    this.sprite = sprite;
+    this.name = name;
+    this.view = view;
+    this.opts = { ...PLAYER_DEFAULTS[view], ...opts };
+    this.input = { ...NO_INPUT };
+    this.override = null;
+    this.prev = { ...NO_INPUT };
+    this.facing = view === 'topdown' ? 'down' : 'right';
+    this.busy = null;            // a one-shot animation (land, attack) that plays out unless interrupted
+    this.airborne = false;
+    this.lastGround = -1e9;
+    this.jumpQueued = -1e9;
+    const tags = Object.keys(sprite.scene.cache.json.get(name)?.meta?.pixelforge?.animations ?? {});
+    const first = tags[0];
+    const pick = (...actions) => actions.map((a) => `${name}_${a}`).find((k) => tags.includes(k));
+    this.tags = tags;
+    this.anim = {
+      idle: pick('idle') ?? first, walk: pick('walk', 'idle') ?? first, run: pick('run', 'walk', 'idle') ?? first,
+      rise: pick('jump_rise', 'jump', 'idle') ?? first, fall: pick('jump_fall', 'jump_rise', 'jump', 'idle') ?? first,
+      land: pick('jump_land'), attack: pick('attack'),
+    };
+    const kb = sprite.scene.input?.keyboard;
+    this.keys = kb ? kb.addKeys(Object.values(INPUT_KEYS).flat().join(',')) : null;
+    sprite.on('animationcomplete', (a) => { if (a.key === this.busy) this.busy = null; });
+  }
+
+  readInput() {
+    if (this.override) return { ...NO_INPUT, ...this.override };
+    if (!this.keys) return { ...NO_INPUT };
+    const out = {};
+    for (const [k, codes] of Object.entries(INPUT_KEYS)) out[k] = codes.some((c) => this.keys[c]?.isDown);
+    return out;
+  }
+
+  update(time) {
+    const s = this.sprite;
+    if (!s.active || !s.body) return;
+    this.input = this.readInput();
+    if (this.view === 'side') this.updateSide(time, this.input);
+    else if (this.view === 'overhead') this.updateOverhead(this.input);
+    else this.updateTopdown(this.input);
+    this.prev = this.input;
+  }
+
+  play(key) {
+    if (key) this.sprite.play(key, true);   // keeps playing if it already is
+  }
+
+  get onGround() {
+    const b = this.sprite.body;
+    return !!(b?.blocked?.down || b?.touching?.down);
+  }
+
+  updateSide(time, input) {
+    const s = this.sprite, body = s.body, o = this.opts, A = this.anim;
+    const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    const onGround = this.onGround;
+    const jumpHeld = input.jump || input.up;
+    if (jumpHeld && !(this.prev.jump || this.prev.up)) this.jumpQueued = time;
+    if (onGround) this.lastGround = time;
+    // forgiving jumps: a press just before landing, or just after walking off a ledge, still counts
+    if (time - this.jumpQueued < o.buffer && time - this.lastGround < o.coyote) {
+      body.setVelocityY(-o.jump);
+      this.jumpQueued = this.lastGround = -1e9;
+      this.busy = null;
+      s.emit('pixelforge-jump', s);
+    }
+    if (!jumpHeld && body.velocity.y < -o.jump / 3) body.setVelocityY(-o.jump / 3);   // short hop on release
+
+    const attacking = !!this.busy && this.busy === A.attack;
+    body.setVelocityX(attacking && onGround ? 0 : dir * (input.run ? o.run : o.speed));
+    if (dir) { s.setFlipX(dir < 0); this.facing = dir < 0 ? 'left' : 'right'; }
+    if (input.attack && !this.prev.attack && A.attack && !attacking) {
+      this.busy = A.attack;
+      s.play(A.attack);
+      s.emit('pixelforge-attack', s);
+    }
+    const nowAttacking = !!this.busy && this.busy === A.attack;
+    if (!onGround) {
+      if (!nowAttacking) { this.busy = null; this.play(body.velocity.y < 0 ? A.rise : A.fall); }
+    } else if (this.airborne) {
+      s.emit('pixelforge-land', s);
+      if (A.land && !nowAttacking) { this.busy = A.land; s.play(A.land); }
+    } else if (this.busy && dir && this.busy === A.land) {
+      this.busy = null;   // moving cancels the landing pose
+    }
+    if (onGround && !this.busy) this.play(dir ? (input.run ? A.run : A.walk) : A.idle);
+    this.airborne = !onGround;
+  }
+
+  updateTopdown(input) {
+    const s = this.sprite, o = this.opts;
+    const vx = (input.right ? 1 : 0) - (input.left ? 1 : 0), vy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+    if (input.attack && !this.prev.attack && !this.busy) {
+      const dir = this.facing === 'left' || this.facing === 'right' ? 'side' : this.facing;
+      const key = `${this.name}_attack_${dir}`;
+      if (this.tags.includes(key)) {
+        this.busy = key;
+        playFacing(s, 'attack', this.facing);
+        s.emit('pixelforge-attack', s);
+      }
+    }
+    if (this.busy) {
+      s.body.setVelocity(0, 0);
+    } else {
+      s.body.setVelocity(vx * o.speed, vy * o.speed);
+      if (vx || vy) this.facing = vx ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
+      playFacing(s, vx || vy ? 'walk' : 'idle', this.facing);
+    }
+    s.setDepth(s.y);
+  }
+
+  updateOverhead(input) {
+    const s = this.sprite, o = this.opts, A = this.anim;
+    const vx = (input.right ? 1 : 0) - (input.left ? 1 : 0), vy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+    const len = Math.hypot(vx, vy) || 1;
+    if (input.attack && !this.prev.attack && !this.busy && A.attack) {
+      this.busy = A.attack;
+      s.play(A.attack);
+      s.emit('pixelforge-attack', s);
+    }
+    if (this.busy) {
+      s.body.setVelocity(0, 0);
+    } else {
+      s.body.setVelocity((vx / len) * o.speed, (vy / len) * o.speed);
+      if (vx || vy) { s.setRotation(Math.atan2(vy, vx)); this.facing = Math.round(Math.atan2(vy, vx) * 180 / Math.PI); }
+      this.play(vx || vy ? A.walk : A.idle);
+    }
+  }
+
+  // What a playtest reads: position, velocity, ground contact, facing and the current animation.
+  state() {
+    const s = this.sprite, b = s.body;
+    return { x: Math.round(s.x * 100) / 100, y: Math.round(s.y * 100) / 100,
+             vx: Math.round((b?.velocity?.x ?? 0) * 100) / 100, vy: Math.round((b?.velocity?.y ?? 0) * 100) / 100,
+             onGround: this.onGround, facing: this.facing, anim: s.anims?.currentAnim?.key ?? null };
+  }
+}
+
+// Creates the player at (x, y) (its origin: the feet, or the centre for overhead sprites) with an
+// Arcade body fitted to its view, and runs its controller every frame. opts: view, speed, run, jump,
+// gravity (side; total gravity on the player, whatever the world's), coyote, buffer (ms),
+// collideWorldBounds (default true). Returns the sprite; the controller is sprite.controller.
+export function addPixelforgePlayer(scene, x, y, name, opts = {}) {
+  const pf = scene.cache.json.get(name)?.meta?.pixelforge;
+  if (!pf) throw new Error(`pixelforge: '${name}' isn't loaded (loadPixelforge(this, '${name}') in preload)`);
+  const view = opts.view ?? pixelforgeView(scene, name);
+  if (!(view in PLAYER_DEFAULTS)) throw new Error(`pixelforge: view '${view}' must be side, topdown or overhead`);
+  if (!Object.keys(pf.animations).every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
+  const sprite = scene.physics.add.sprite(x, y, name);
+  const b = pixelforgeBody(scene, name);
+  const body = sprite.body;
+  if (view === 'side') {
+    body.setSize(b.width, b.height).setOffset(b.x, b.y);
+    const gravity = opts.gravity ?? PLAYER_DEFAULTS.side.gravity;
+    body.setAllowGravity(true);
+    body.setGravityY(gravity - (scene.physics.world?.gravity?.y ?? 0));
+  } else if (view === 'topdown') {
+    // collide with the feet only, so the head can overlap the top edge of a wall
+    body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8);
+    body.setAllowGravity(false);
+  } else {
+    const r = Math.min(b.width, b.height) / 2;
+    body.setCircle(r, b.x + b.width / 2 - r, b.y + b.height / 2 - r);
+    body.setAllowGravity(false);
+  }
+  if (opts.collideWorldBounds ?? true) sprite.setCollideWorldBounds?.(true);
+  const controller = new PixelforgeController(sprite, name, view, opts);
+  sprite.controller = controller;
+  const tick = (time) => controller.update(time);
+  scene.events.on('update', tick);
+  const stop = () => { scene.events.off('update', tick); scene.events.off('shutdown', stop); };
+  scene.events.once('shutdown', stop);
+  sprite.once('destroy', stop);
+  const start = controller.anim.idle ?? (view === 'topdown' ? `${name}_idle_down` : undefined);
+  if (view === 'topdown') playFacing(sprite, 'idle', 'down'); else if (start) sprite.play(start);
+  return sprite;
+}
+
 // Debug overlay: call every frame with a Graphics object, e.g. in update():
 //   debug.clear(); drawPixelforgeBoxes(debug, [knight, ...enemies]);
 // Body box yellow, hurtboxes green, hitboxes red.
