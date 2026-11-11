@@ -11,8 +11,11 @@ work branch. Don't merge to `main` or tag unless the user says to. Ask at the en
 
 ## 0. Before starting (every session)
 
-1. `EnterWorktree` (name e.g. `levels`). It branches from `origin/main`. The shared checkout at
-   `C:\Users\davis\dev\claude projects\pixel_art` may hold another session's uncommitted work: don't touch it.
+1. `EnterWorktree` (name e.g. `levels`). It branches from `origin/main`. While this plan lives only on branch
+   `plan-levels-and-game`, run `git fetch origin` then `git reset --hard origin/plan-levels-and-game` in the fresh
+   worktree (it's `main` plus this file), or `git merge origin/plan-levels-and-game` if `main` has moved past it.
+   The shared checkout at `C:\Users\davis\dev\claude projects\pixel_art` may hold another session's uncommitted
+   work: don't touch it.
 2. Read `CLAUDE.md` (dev notes) and `pixelforge/assets/CLAUDE.md` (the per-game guide). Skim the modules this
    phase touches: `model.py`, `export.py`, `validate.py`, `render.py`, `server.py`,
    `assets/phaser/pixelforge.js`, `assets/viewer/{app.js,tilemap.html,platformer.html}`.
