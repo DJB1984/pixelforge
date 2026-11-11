@@ -92,7 +92,7 @@ def _grid_sheet(sprite: Sprite, grids: list, cols: int, cw: int, ch: int, paddin
 
 def _tiled_json(name: str, image: str, size: tuple[int, int], tw: int, th: int, padding: int, cols: int,
                 names: list[str], props: list[dict], anims: dict[int, list[list[int]]], total: int,
-                sample: list, stamps: dict) -> dict:
+                sample: list, stamps: dict, autotile: dict | None = None) -> dict:
     tiles = []
     for i, (tname, p) in enumerate(zip(names, props)):
         tile = {"id": i, "properties": [_tiled_property("name", tname)]
@@ -109,7 +109,8 @@ def _tiled_json(name: str, image: str, size: tuple[int, int], tw: int, th: int, 
         # animations["i"] = [[slot, ms], ...] is the frame sequence the helper plays for tile i,
         # stamps[name] = rows of tile indices (-1 = leave empty) that stampPixelforgeTiles places
         "pixelforge": {"tileset": name, "names": names, "properties": props,
-                       "animations": {str(i): a for i, a in anims.items()}, "sample": sample, "stamps": stamps},
+                       "animations": {str(i): a for i, a in anims.items()}, "sample": sample, "stamps": stamps,
+                       **({"autotile": autotile} if autotile else {})},
     }
 
 
@@ -143,7 +144,8 @@ def build_tileset(sprite: Sprite, padding: int = 1) -> tuple[Image.Image, dict]:
     names = sprite.tile_names()
     stamps = {n: sprite.stamp_map(n) for n in sprite.stamps}
     data = _tiled_json(sprite.name, f"{sprite.name}.png", (sheet_w, sheet_h), tw, th, padding, cols, names,
-                       [sprite.tile_properties(n) for n in names], anims, len(slots), sprite.sample_map(), stamps)
+                       [sprite.tile_properties(n) for n in names], anims, len(slots), sprite.sample_map(), stamps,
+                       sprite.autotile)
     return img, data
 
 
@@ -287,7 +289,7 @@ def export_sprite(sprite: Sprite, out_dir: Path | None = None, padding: int = 1)
     return paths
 
 
-INDEX_GROUPS = ("sprites", "props", "tilesets", "icons", "fonts")
+INDEX_GROUPS = ("sprites", "props", "tilesets", "icons", "fonts", "levels")
 
 
 def index_group(data: dict) -> str:
@@ -310,6 +312,7 @@ def write_index(out_dir: Path | None = None) -> Path:
         except json.JSONDecodeError:
             continue
         found[index_group(data)].append(js.stem)
+    found["levels"] = sorted(p.stem for p in (out / "levels").glob("*.json"))
     p = out / "index.json"
     p.write_text(json.dumps(found, indent=2) + "\n", encoding="utf-8")
     return p

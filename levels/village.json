@@ -1,0 +1,117 @@
+{
+  "name": "village",
+  "view": "topdown",
+  "tileset": "terrain",
+  "background": {
+    "color": "#3e8948"
+  },
+  "legend": {
+    "W": "auto:water"
+  },
+  "layers": [
+    {
+      "name": "ground",
+      "rows": [
+        "########################################",
+        "gggggggggggggggggtgggggggggggfgggggggggg",
+        "ggfggggggggggggggggggggggggggggWWWWWWggg",
+        "gggggggggggggggggggggggggggggggWWWWWWggg",
+        "gggggggggggggggggggggggggggggggWWWWWWgtg",
+        "gtgggggggggggggggggfgggggggggggWWWWWWggg",
+        "gggggggggtggggggggggggtggggggggggggggggg",
+        "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "dddddddddddddddddddddddddddddddddddddddd",
+        "ssssssssssssssssssssssssssssssssssssssss",
+        "ggggggtggggggfgggggggggggggfggggggtggggg",
+        "########################################"
+      ]
+    },
+    {
+      "name": "decor",
+      "rows": [
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................",
+        "........................................"
+      ]
+    }
+  ],
+  "stamps": [
+    {
+      "stamp": "pond",
+      "at": [
+        10,
+        2
+      ],
+      "layer": "ground"
+    },
+    {
+      "tileset": "house_tiles",
+      "stamp": "house",
+      "at": [
+        24,
+        1
+      ],
+      "layer": "decor"
+    }
+  ],
+  "objects": {
+    "legend": {
+      "H": {
+        "prop": "house",
+        "snap": "left",
+        "state": "closed"
+      },
+      "c": {
+        "prop": "chest",
+        "type": "chest",
+        "state": "closed",
+        "props": {
+          "loot": "key"
+        }
+      },
+      "D": {
+        "type": "door",
+        "to": "meadow",
+        "size": [
+          2,
+          1
+        ]
+      },
+      "s": {
+        "prop": "chest",
+        "type": "item",
+        "state": "open",
+        "props": {
+          "loot": "coin"
+        }
+      }
+    },
+    "rows": [
+      "........................................",
+      "........................................",
+      "........................................",
+      "................c.......................",
+      ".....................s..................",
+      "...H....................................",
+      "....D...................................",
+      "........................................",
+      "........@...............................",
+      "........................................",
+      "........................................",
+      "........................................"
+    ]
+  },
+  "player": "knight_topdown",
+  "camera": {
+    "zoom": 1
+  }
+}

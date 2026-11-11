@@ -39,6 +39,9 @@
     "bridge",
     "wall"
   ],
+  "autotile": {
+    "water": {"base": "water", "edges": {"n": "water_n", "s": "water_s"}}
+  },
   "properties": {
     "water*": {"collides": true, "liquid": true},
     "wall": {"collides": true}

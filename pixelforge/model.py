@@ -229,6 +229,8 @@ class Sprite:
     slice: tuple[int, int] | None = None  # also export the first frame cut into tiles of this size
     stamps: dict = field(default_factory=dict)  # tilesets: name -> {"legend": {...}, "rows": [...]}
     item_meta: dict[str, dict] = field(default_factory=dict)  # icons: name -> {"nine": [l, r, t, b]}
+    # tilesets: terrain -> {"base": tile, "edges": {"n": tile, "ne": tile, ...}}; levels pick edges by neighbours
+    autotile: dict[str, dict] = field(default_factory=dict)
     # fonts ("type": "font")
     glyph_widths: dict[str, int] = field(default_factory=dict)
     letter_spacing: int = 1
@@ -310,10 +312,14 @@ class Sprite:
         for sname, st in stamps.items():
             if not (isinstance(st, dict) and isinstance(st.get("rows"), list)):
                 raise SpriteError(f"stamps[{sname!r}] must be {{\"rows\": [...]}} (plus an optional \"legend\")")
+        autotile = meta.get("autotile", {})
+        if not isinstance(autotile, dict) or not all(isinstance(v, dict) and isinstance(v.get("base"), str)
+                                                     for v in autotile.values()):
+            raise SpriteError("autotile must be {\"terrain\": {\"base\": tile, \"edges\": {\"n\": tile, ...}}}")
         s = cls(meta.get("name", name), path, w, h, origin, palette_raw, palette, anims,
                 size_class, body, roles, int(meta.get("hit_pad", 0)), int(meta.get("hurt_pad", 0)), anchor,
                 kind, tiles, tile_props, columns, meta.get("sample"), tile_anims, view, stamps=stamps,
-                item_meta=item_meta)
+                item_meta=item_meta, autotile=autotile)
         if kind == "prop":
             s._load_prop(meta)
         if kind == "font":

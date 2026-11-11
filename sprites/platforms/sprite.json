@@ -1,0 +1,76 @@
+{
+  "name": "platforms",
+  "type": "tileset",
+  "view": "side",
+  "size": [
+    16,
+    16
+  ],
+  "columns": 8,
+  "palette": {
+    "g": "green",
+    "G": "forest",
+    "D": "dark_green",
+    "n": "brown",
+    "b": "dark_brown",
+    "e": "deep_brown",
+    "t": "tan",
+    "y": "yellow",
+    "w": "white",
+    "r": "red"
+  },
+  "tiles": [
+    "top",
+    "dirt",
+    "top_l",
+    "top_r",
+    "dirt_l",
+    "dirt_r",
+    "plat_l",
+    "plat",
+    "plat_r",
+    "plank",
+    "tuft",
+    "flower"
+  ],
+  "properties": {
+    "top*": {
+      "collides": true
+    },
+    "dirt*": {
+      "collides": true
+    },
+    "plat*": {
+      "collides": true
+    },
+    "plank": {
+      "collides": true,
+      "oneway": true
+    }
+  },
+  "sample": {
+    "legend": {
+      "T": "top",
+      "d": "dirt",
+      "L": "top_l",
+      "R": "top_r",
+      "[": "dirt_l",
+      "]": "dirt_r",
+      "<": "plat_l",
+      "=": "plat",
+      ">": "plat_r",
+      "-": "plank",
+      ",": "tuft",
+      "*": "flower"
+    },
+    "rows": [
+      "................",
+      "..........<==>..",
+      "................",
+      "....---.........",
+      "..,*........*,..",
+      "TTTTR..LTTTTTTTT",
+      "dddd]..[dddddddd"
+    ]
+  }
+}

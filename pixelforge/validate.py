@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import fnmatch
+import itertools
 from dataclasses import dataclass
 
 from .boxes import frame_boxes
@@ -363,11 +364,120 @@ def check_tiles(s: Sprite) -> list[Issue]:
             issues.append(Issue("warn", f"{name}/stamps/{sname}", "rows have different lengths"))
         if not any(i >= 0 for r in rows for i in r):
             issues.append(Issue("warn", f"{name}/stamps/{sname}", "stamp is empty"))
+    from .level import EDGE_KEYS
+    for terrain, at in s.autotile.items():
+        where = f"{name}/autotile/{terrain}"
+        for tname in [at["base"], *at.get("edges", {}).values()]:
+            if tname not in seen:
+                issues.append(Issue("error", where, f"no tile {tname!r}"))
+        bad = sorted(set(at.get("edges", {})) - set(EDGE_KEYS))
+        if bad:
+            issues.append(Issue("error", where, f"edge keys {bad}: use n s e w and their combinations in that "
+                                                f"order (ne, nw, se, sw, ns, ew, nse, ...)"))
     return issues
 
 
-def check(names: list[str]) -> list[Issue]:
+def _overlap(a, b) -> bool:
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+
+
+def check_level(name: str) -> list[Issue]:
+    """Levels: everything the level names exists, the player can start somewhere sensible, doors go
+    somewhere, and (top-down) what matters can be walked to."""
+    from .level import QUIET_TYPES, Level, list_levels
+    try:
+        lv = Level.load(name)
+    except SpriteError as e:
+        return [Issue("error", f"level {name}", str(e))]
+    issues = [Issue(lvl, f"level {where}", msg) for lvl, where, msg in lv.problems]
+    tw, th = lv.tile_w, lv.tile_h
+    W, H = lv.pixel_size
+    solid = [o for o in lv.objects if o.footprint]
+
+    def cell_of(x, y):
+        return int(x // tw), int(y // th)
+
+    spawns = lv.spawns()
+    if not spawns:
+        issues.append(Issue("error", f"level {name}/objects", "no spawn: put '@' in objects.rows (or an object with "
+                                                              "\"type\": \"spawn\") where the player starts"))
+    for s in spawns:
+        cx, cy = cell_of(s.x, s.y - 1)          # the feet stand on the row above the origin
+        if not (0 <= s.x < W and 0 < s.y <= H):
+            issues.append(Issue("error", f"level {name}/{s.source}", f"spawn ({s.x}, {s.y}) is outside the "
+                                                                     f"{W}x{H} level"))
+        elif lv.collides(cx, cy):
+            issues.append(Issue("error", f"level {name}/{s.source}", f"spawn is on a colliding tile "
+                                                                     f"({lv.colliding_tile(cx, cy)})"))
+        for o in solid:
+            fx, fy, fw, fh = o.footprint
+            if fx <= s.x < fx + fw and fy <= s.y - 1 < fy + fh:
+                issues.append(Issue("error", f"level {name}/{s.source}", f"spawn is inside {o.name!r}'s solid "
+                                                                         f"footprint {list(o.footprint)}"))
+    known = list_levels()
+    for o in lv.objects:
+        if o.type == "door" and not o.to:
+            issues.append(Issue("warn", f"level {name}/{o.source}", "door without \"to\" (the level it leads to)"))
+        elif o.to and o.to not in known:
+            issues.append(Issue("error", f"level {name}/{o.source}", f"door to {o.to!r}: no such level "
+                                                                     f"(known: {', '.join(known)})"))
+        x, y, w, h = o.rect or o.art or (o.x, o.y, 1, 1)
+        if x + w <= 0 or y + h <= 0 or x >= W or y >= H:
+            issues.append(Issue("warn", f"level {name}/{o.source}", f"{o.name!r} at ({o.x}, {o.y}) is outside the "
+                                                                    f"{W}x{H} level"))
+    for a, b in itertools.combinations(solid, 2):
+        if _overlap(a.footprint, b.footprint):
+            issues.append(Issue("warn", f"level {name}/objects", f"solid footprints of {a.name!r} ({a.source}) and "
+                                                                 f"{b.name!r} ({b.source}) overlap"))
+
+    if lv.view == "side":
+        issues.append(Issue("info", f"level {name}", "side view: platform reachability isn't checked; playtest "
+                                                     "the route (`pixelforge play`)"))
+        return issues
+    # top-down / overhead: flood-fill the walkable cells from the spawn
+    blocked = [[lv.collides(cx, cy) for cx in range(lv.width)] for cy in range(lv.height)]
+    for o in solid:
+        fx, fy, fw, fh = o.footprint
+        for cy in range(lv.height):
+            for cx in range(lv.width):
+                px, py = cx * tw + tw / 2, cy * th + th / 2
+                if fx <= px < fx + fw and fy <= py < fy + fh:
+                    blocked[cy][cx] = True
+    start = next(((cell_of(s.x, s.y - 1)) for s in spawns), None)
+    if start is None or not (0 <= start[0] < lv.width and 0 <= start[1] < lv.height):
+        return issues
+    seen, stack = {start}, [start]
+    while stack:
+        cx, cy = stack.pop()
+        for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+            if 0 <= nx < lv.width and 0 <= ny < lv.height and (nx, ny) not in seen and not blocked[ny][nx]:
+                seen.add((nx, ny))
+                stack.append((nx, ny))
+
+    def cells(o):
+        if o.rect or o.footprint:
+            x, y, w, h = o.rect or o.footprint
+            return {(cx, cy) for cy in range(int(y // th), int((y + h - 1) // th) + 1)
+                    for cx in range(int(x // tw), int((x + w - 1) // tw) + 1)}
+        return {cell_of(o.x, o.y - 1)}
+
+    unreachable = []
+    for o in lv.objects:
+        if o.type in QUIET_TYPES and not o.props and not (o.prop or "").startswith("chest"):
+            continue
+        near = {(cx + dx, cy + dy) for cx, cy in cells(o) for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1))}
+        if not near & seen:
+            unreachable.append(f"{o.name!r} ({o.type}, {o.source})")
+    if unreachable:
+        issues.append(Issue("warn", f"level {name}", f"can't walk from the spawn to: {', '.join(unreachable)}"))
+    return issues
+
+
+def check(names: list[str], levels: list[str] | None = None) -> list[Issue]:
+    """Sprites, then levels (default: none)."""
     out = []
     for n in names:
         out.extend(check_sprite(n))
+    for n in levels or []:
+        out.extend(check_level(n))
     return out

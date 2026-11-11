@@ -12,6 +12,7 @@ from . import compare as cmp
 from . import critiques as cq
 from . import context as cx
 from . import export as ex
+from . import level as lvl
 from . import model
 from . import motion
 from . import render as rd
@@ -70,6 +71,36 @@ def cmd_list(args):
         what = (f"prop ({s.layer}{', solid' if s.solid else ''}{f', scroll {s.scroll:g}' if s.scroll != 1 else ''}"
                 f"{', sliced' if s.slice else ''})  ") if s.kind == "prop" else ""
         print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {what}{anims}")
+    for n in lvl.list_levels():
+        try:
+            lv = lvl.Level.load(n)
+        except SpriteError as e:
+            print(f"{n:16} level: error: {e}")
+            continue
+        types = {}
+        for o in lv.objects:
+            types[o.type] = types.get(o.type, 0) + 1
+        print(f"{n:16} level  {lv.width}x{lv.height} tiles ({lv.pixel_size[0]}x{lv.pixel_size[1]} px)  {lv.view}  "
+              f"{', '.join(lv.tilesets)}  layers: {', '.join(l.name for l in lv.layers)}  objects: "
+              + (", ".join(f"{k} {v}" for k, v in types.items()) or "none"))
+
+
+def _split(names: list[str]) -> tuple[list[str], list[str]]:
+    """Names given on the command line -> (sprites, levels). No names: every sprite and level."""
+    if not names:
+        return list_sprites(), lvl.list_levels()
+    levels = set(lvl.list_levels())
+    return [n for n in names if n not in levels], [n for n in names if n in levels]
+
+
+def cmd_new_level(args):
+    try:
+        p = lvl.new_level(args.name, _size(args.size) if args.size else None, args.tileset)
+    except SpriteError as e:
+        sys.exit(str(e))
+    lv = lvl.Level.load(args.name)
+    print(f"created {_rel(p)}: {lv.width}x{lv.height} tiles of {lv.tileset}, {lv.view} view, a spawn ('@') in "
+          f"objects.rows")
 
 
 def cmd_new(args):
@@ -394,34 +425,37 @@ def cmd_palette(args):
 
 
 def cmd_check(args):
-    names = args.sprites or list_sprites()
-    issues = check(names)
+    names, levels = _split(args.sprites)
+    issues = check(names, levels)
     shown = [i for i in issues if args.verbose or i.level != "info"]
     for i in shown:
         print(i)
     errors = sum(i.level == "error" for i in issues)
     warns = sum(i.level == "warn" for i in issues)
     infos = sum(i.level == "info" for i in issues)
-    print(f"{len(names)} sprite(s): {errors} error(s), {warns} warning(s), {infos} info"
+    print(f"{len(names)} sprite(s)" + (f", {len(levels)} level(s)" if levels else "")
+          + f": {errors} error(s), {warns} warning(s), {infos} info"
           + ("" if args.verbose or not infos else " (use -v to show info)"))
     sys.exit(1 if errors else 0)
 
 
 def cmd_export(args):
-    names = list_sprites() if args.all or not args.sprites else args.sprites
-    bad = [i for i in check(names) if i.level == "error"]
+    names, levels = _split([] if args.all else args.sprites)
+    bad = [i for i in check(names, levels) if i.level == "error"]
     if bad and not args.force:
         for i in bad:
             print(i)
         sys.exit("export aborted: fix errors above (or pass --force)")
-    for line in _export(names, args.padding):
+    for line in _export(names, args.padding, levels):
         print(line)
 
 
-def _export(names: list[str], padding: int = 1) -> list[str]:
+def _export(names: list[str], padding: int = 1, levels: list[str] | None = None) -> list[str]:
     out = []
     for n in names:
         out.append("  ".join(_rel(p) for p in ex.export_sprite(Sprite.load(n), padding=padding)))
+    for n in levels or []:
+        out.append(_rel(lvl.export_level(lvl.Level.load(n))))
     ex.export_dir().mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS / "phaser" / "pixelforge.js", ex.export_dir() / "pixelforge.js")
     out.append(_rel(ex.write_index()))
@@ -622,13 +656,15 @@ def cmd_upgrade(args):
     if args.dry_run or args.no_export:
         print("  sprites not re-exported" + (" (dry run)" if args.dry_run else ""))
     elif names := list_sprites():
-        errors = [i for i in check(names) if i.level == "error"]
+        levels = lvl.list_levels()
+        errors = [i for i in check(names, levels) if i.level == "error"]
         if errors:
             print(f"  sprites NOT re-exported: `pixelforge check` reports {len(errors)} error(s); fix them, "
                   f"then run `pixelforge export --all`")
         else:
-            _export(names)
-            print(f"  ~ re-exported {len(names)} sprite(s) and export/pixelforge.js")
+            _export(names, levels=levels)
+            print(f"  ~ re-exported {len(names)} sprite(s)" + (f", {len(levels)} level(s)" if levels else "")
+                  + " and export/pixelforge.js")
             gallery = ex.export_dir() / "gallery.html"
             if gallery.exists():
                 gallery.write_text(render_gallery(), encoding="utf-8")
@@ -670,7 +706,13 @@ def main(argv=None):
     q.add_argument("--fragment", action="store_true", help="omit <html>/<head>/<body> wrapper")
     q.set_defaults(fn=cmd_gallery)
 
-    sub.add_parser("list", help="list sprites").set_defaults(fn=cmd_list)
+    sub.add_parser("list", help="list sprites and levels").set_defaults(fn=cmd_list)
+
+    q = sub.add_parser("new-level", help="scaffold levels/NAME.json: one screen of ground plus a spawn")
+    q.add_argument("name")
+    q.add_argument("--size", help="WxH in tiles (default: one screen at the game's resolution)")
+    q.add_argument("--tileset", help="default: the first tileset")
+    q.set_defaults(fn=cmd_new_level)
 
     q = sub.add_parser("new", help="scaffold a sprite")
     q.add_argument("name")
