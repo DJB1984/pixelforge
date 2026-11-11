@@ -1,0 +1,541 @@
+{
+  "name": "princess",
+  "class": "humanoid",
+  "palette": {
+    "k": "outline",
+    "w": "white",
+    "h": "light_gray",
+    "s": "skin",
+    "S": "skin_shadow",
+    "Y": "yellow",
+    "y": "amber",
+    "o": "clay",
+    "P": "salmon",
+    "p": "magenta",
+    "q": "plum",
+    "c": "cyan",
+    "b": "navy"
+  },
+  "roles": {
+    "hair_*": "none"
+  },
+  "animations": {
+    "idle": {
+      "fps": 2,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "hair_still",
+            "skirt_stand",
+            {
+              "layers": [
+                "torso",
+                "arm_folded",
+                "head"
+              ]
+            }
+          ],
+          "duration": 500
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_sway",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "skirt_stand",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_folded",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ],
+          "duration": 500
+        }
+      ]
+    },
+    "walk": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "hair_still",
+            "skirt_walk_step_a",
+            {
+              "layers": [
+                "torso",
+                "arm_side",
+                "head"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_sway",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "skirt_walk_step_a",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_side",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_sway",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            "skirt_walk_pass",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_side",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "hair_still",
+            "skirt_walk_step_b",
+            {
+              "layers": [
+                "torso",
+                "arm_side",
+                "head"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_sway",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "skirt_walk_step_b",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_side",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_sway",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            "skirt_walk_pass",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_side",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "run": {
+      "fps": 12,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "hair_run_a",
+            "legs_run_contact",
+            "skirt_run_a",
+            {
+              "layers": [
+                "torso",
+                "arm_lift",
+                "head"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_run_b",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "legs_run_down",
+            {
+              "from": "skirt_run_a",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_run_b",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "legs_run_pass",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "skirt_run_b",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            "hair_run_a",
+            "legs_run_contact_b",
+            "skirt_run_a",
+            {
+              "layers": [
+                "torso",
+                "arm_lift",
+                "head"
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_run_b",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "legs_run_down_b",
+            {
+              "from": "skirt_run_a",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_run_b",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "legs_run_pass_b",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "skirt_run_b",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "jump_rise": {
+      "fps": 10,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            {
+              "from": "hair_still",
+              "offset": [
+                0,
+                3
+              ]
+            },
+            "skirt_squash",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                3
+              ]
+            }
+          ],
+          "duration": 90
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_still",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "legs_rise",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": "skirt_rise",
+              "offset": [
+                0,
+                -1
+              ]
+            },
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                -1
+              ]
+            }
+          ],
+          "duration": 200
+        }
+      ]
+    },
+    "jump_fall": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        {
+          "layers": [
+            "hair_fall",
+            "legs_fall",
+            "skirt_fall_a",
+            {
+              "layers": [
+                "torso",
+                "arm_lift",
+                "head"
+              ]
+            }
+          ],
+          "duration": 130
+        },
+        {
+          "layers": [
+            "hair_fall",
+            "legs_fall",
+            "skirt_fall_b",
+            {
+              "layers": [
+                "torso",
+                "arm_lift",
+                "head"
+              ]
+            }
+          ],
+          "duration": 130
+        }
+      ]
+    },
+    "jump_land": {
+      "fps": 10,
+      "loop": false,
+      "frames": [
+        {
+          "layers": [
+            {
+              "from": "hair_still",
+              "offset": [
+                0,
+                3
+              ]
+            },
+            "skirt_squash",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_lift",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                3
+              ]
+            }
+          ],
+          "duration": 100
+        },
+        {
+          "layers": [
+            {
+              "from": "hair_still",
+              "offset": [
+                0,
+                1
+              ]
+            },
+            "skirt_stand",
+            {
+              "from": {
+                "layers": [
+                  "torso",
+                  "arm_side",
+                  "head"
+                ]
+              },
+              "offset": [
+                0,
+                1
+              ]
+            }
+          ],
+          "duration": 120
+        }
+      ]
+    }
+  }
+}

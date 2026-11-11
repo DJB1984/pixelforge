@@ -2,7 +2,8 @@
   "sprites": [
     "knight",
     "knight_overhead",
-    "knight_topdown"
+    "knight_topdown",
+    "princess"
   ],
   "props": [
     "chest",

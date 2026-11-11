@@ -1,0 +1,130 @@
+{
+  "next": 8,
+  "critiques": [
+    {
+      "id": 1,
+      "status": "fixed",
+      "text": "fix the gap here",
+      "target": {
+        "asset": "knight_topdown",
+        "anim": "walk_down",
+        "frame": 2,
+        "region": [
+          25,
+          45,
+          15,
+          3
+        ]
+      },
+      "created": "2026-11-10T19:47:46+00:00",
+      "updated": "2026-11-10T19:48:57+00:00",
+      "note": "Extended the step legs' thighs up a row so they meet the belt when the body bobs up; also fixes walk_down frame 0 and walk_up frames 0 and 2, which share those legs"
+    },
+    {
+      "id": 2,
+      "status": "fixed",
+      "text": "His sword swing looks unnatural. His arm doesn't look like he's actually holding a sword.",
+      "target": {
+        "asset": "knight_overhead",
+        "anim": "attack",
+        "frame": 1,
+        "region": [
+          33,
+          23,
+          26,
+          20
+        ]
+      },
+      "created": "2026-11-10T23:48:09+00:00",
+      "updated": "2026-11-10T23:51:57+00:00",
+      "note": "Redrew the strike arm so the forearm comes out from under the shoulder plate into a fist that grips the hilt, and moved the sword out 1px so the fist sits clear of the helmet."
+    },
+    {
+      "id": 3,
+      "status": "fixed",
+      "text": "The plume should be bigger",
+      "target": {
+        "asset": "knight_topdown",
+        "anim": "idle_down",
+        "frame": 0,
+        "region": [
+          27,
+          20,
+          10,
+          7
+        ]
+      },
+      "created": "2026-11-11T19:56:31+00:00",
+      "updated": "2026-11-11T19:58:31+00:00",
+      "note": "Made the plume taller and wider in the front and back views (6px wide, 7 tall) and gave the side view a larger crest that curls back to match."
+    },
+    {
+      "id": 4,
+      "status": "fixed",
+      "text": "Clean up whatever is sticking out here. Here walk looks more like a slither, that's not good",
+      "target": {
+        "asset": "princess",
+        "anim": "walk",
+        "frame": 4,
+        "region": [
+          39,
+          43,
+          7,
+          5
+        ]
+      },
+      "created": "2026-11-11T20:16:39+00:00",
+      "updated": "2026-11-11T20:17:50+00:00",
+      "note": "Removed the stray slipper stub and rebuilt the walk with an ankle-length hem so her feet visibly step (contact, down, passing) with a 1px up/down bob instead of gliding."
+    },
+    {
+      "id": 5,
+      "status": "fixed",
+      "text": "her hair isn't flowing, it looks like a braid, what's this horrible block at the back of her head.",
+      "target": {
+        "asset": "princess",
+        "anim": "run",
+        "frame": 4,
+        "region": [
+          16,
+          21,
+          19,
+          14
+        ]
+      },
+      "created": "2026-11-11T20:17:14+00:00",
+      "updated": "2026-11-11T20:20:28+00:00",
+      "note": "Redrew the running hair by hand as one flowing mane with three wavy tips and shadow strands that ripple between frames, and removed the outline seam at the back of her head that made it look like a block."
+    },
+    {
+      "id": 6,
+      "status": "fixed",
+      "text": "Her neck feels kinda long.",
+      "target": {
+        "asset": "princess"
+      },
+      "created": "2026-11-11T20:17:52+00:00",
+      "updated": "2026-11-11T20:20:30+00:00",
+      "note": "Shortened her neck by covering the exposed collar skin with a pink neckline, leaving one row of neck under the jaw."
+    },
+    {
+      "id": 7,
+      "status": "fixed",
+      "text": "Don't show her feet when she walks, only when she runs.",
+      "target": {
+        "asset": "princess",
+        "anim": "walk",
+        "frame": 0,
+        "region": [
+          24,
+          41,
+          22,
+          7
+        ]
+      },
+      "created": "2026-11-11T20:18:47+00:00",
+      "updated": "2026-11-11T20:21:20+00:00",
+      "note": "Walk is floor-length again with no feet showing; each step now pushes a bulge and a leg fold into the front hem while the back hem trails, then the skirt narrows as the legs pass, so she still visibly strides."
+    }
+  ]
+}
