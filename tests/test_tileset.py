@@ -76,7 +76,7 @@ class TilesetTest(unittest.TestCase):
             for n in ("terrain", "hero"):
                 export_sprite(Sprite.load(n), p.root / "export")
             idx = json.loads(write_index(p.root / "export").read_text())
-            self.assertEqual(idx, {"sprites": ["hero"], "props": [], "tilesets": ["terrain"], "icons": [], "fonts": [], "levels": []})
+            self.assertEqual(idx, {"sprites": ["hero"], "props": [], "fx": [], "tilesets": ["terrain"], "icons": [], "fonts": [], "levels": []})
 
     def test_check(self):
         with TempProject() as p:

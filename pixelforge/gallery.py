@@ -47,6 +47,7 @@ def gallery_data(names: list[str] | None = None) -> dict:
             "name": s.name, "kind": s.kind, "w": s.width, "h": s.height, "origin": list(s.origin),
             "body": list(s.body_rect()), "class": s.size_class,
             **({"prop": prop_info(s)} if s.kind == "prop" else {}),
+            **({"variantOf": s.base} if s.base else {}),
             "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()],
             "sheet": _data_uri(img),
             "anims": anims,

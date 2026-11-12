@@ -10,7 +10,7 @@
  "tilewidth": 16,
  "tileheight": 16,
  "nextlayerid": 5,
- "nextobjectid": 6,
+ "nextobjectid": 8,
  "layers": [
   {
    "type": "tilelayer",
@@ -1628,6 +1628,31 @@
     },
     {
      "id": 5,
+     "name": "welcome_sign",
+     "type": "prop",
+     "class": "prop",
+     "visible": true,
+     "rotation": 0,
+     "properties": [
+      {
+       "name": "prop",
+       "type": "string",
+       "value": "sign"
+      },
+      {
+       "name": "text",
+       "type": "string",
+       "value": "[\"Welcome to the village! The chests are yours to open.\", \"The door by the house leads back to the meadow.\"]"
+      }
+     ],
+     "x": 184,
+     "y": 128,
+     "width": 0,
+     "height": 0,
+     "point": true
+    },
+    {
+     "id": 6,
      "name": "player",
      "type": "spawn",
      "class": "spawn",
@@ -1636,6 +1661,36 @@
      "properties": [],
      "x": 136,
      "y": 144,
+     "width": 0,
+     "height": 0,
+     "point": true
+    },
+    {
+     "id": 7,
+     "name": "chest_iron",
+     "type": "chest",
+     "class": "chest",
+     "visible": true,
+     "rotation": 0,
+     "properties": [
+      {
+       "name": "prop",
+       "type": "string",
+       "value": "chest_iron"
+      },
+      {
+       "name": "state",
+       "type": "string",
+       "value": "closed"
+      },
+      {
+       "name": "loot",
+       "type": "string",
+       "value": "potion"
+      }
+     ],
+     "x": 488,
+     "y": 160,
      "width": 0,
      "height": 0,
      "point": true
@@ -2299,10 +2354,48 @@
    },
    {
     "id": 5,
+    "name": "welcome_sign",
+    "type": "prop",
+    "x": 184,
+    "y": 128,
+    "prop": "sign",
+    "footprint": [
+     182,
+     124,
+     4,
+     4
+    ],
+    "props": {
+     "text": [
+      "Welcome to the village! The chests are yours to open.",
+      "The door by the house leads back to the meadow."
+     ]
+    }
+   },
+   {
+    "id": 6,
     "name": "player",
     "type": "spawn",
     "x": 136,
     "y": 144
+   },
+   {
+    "id": 7,
+    "name": "chest_iron",
+    "type": "chest",
+    "x": 488,
+    "y": 160,
+    "prop": "chest_iron",
+    "state": "closed",
+    "footprint": [
+     481,
+     153,
+     14,
+     7
+    ],
+    "props": {
+     "loot": "potion"
+    }
    }
   ],
   "size": [

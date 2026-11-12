@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .model import SpriteError, Sprite, VIEWS, game_resolution, game_view, list_sprites, rel, root
+from .model import SpriteError, Sprite, VIEWS, game_resolution, game_view, list_sprites, rel, root, sprite_folder
 
 DIRS = "nsew"
 # every combination of n s e w, written in that order: "n", "ne", "nse", "nsew"...
@@ -481,6 +481,9 @@ class _Loader:
                 self.err(where, f"no {kind} {n!r}")
                 return None
             s = Sprite.load(n)
+            if s.kind == "fx":
+                self.err(where, f"{n!r} is an effect; the game spawns those (spawnPixelforgeFx), levels don't place them")
+                return None
             if (kind == "prop") != (s.kind == "prop"):
                 self.err(where, f"{n!r} is a {s.kind}; use \"{'prop' if s.kind == 'prop' else 'sprite'}\": {n!r}")
                 return None
@@ -604,9 +607,9 @@ def export_level(lv: Level, out_dir: Path | None = None) -> Path:
 # ---- scaffolding --------------------------------------------------------------------------------
 def default_player(view: str) -> str | None:
     """The character a new level is played with: the first one drawn for this view, else the first one."""
-    chars = list_sprites("sprite")
+    chars = list_sprites("sprite", with_variants=False)
     def fits(n):
-        meta = json.loads((root() / "sprites" / n / "sprite.json").read_text(encoding="utf-8"))
+        meta = json.loads((sprite_folder(n) / "sprite.json").read_text(encoding="utf-8"))
         own = meta.get("view") or (meta.get("class") if meta.get("class") in ("topdown", "overhead") else "side")
         return own == view
     return next((n for n in chars if fits(n)), chars[0] if chars else None)

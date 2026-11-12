@@ -56,6 +56,15 @@ def _frame_target(s: Sprite, anim: str, index: str):
     return frames[i], f"{s.name}:{anim}[{i}]  {a.duration_ms(i)}ms", prev, nxt
 
 
+def _editable(name: str) -> Sprite:
+    """A sprite whose files a command may change. A variant has none: it recolors its base's frames."""
+    s = Sprite.load(name)
+    if s.base:
+        sys.exit(f"{name} is a palette variant of {s.base}: edit {s.base}'s frames (the variant only swaps "
+                 f"colors, in {s.base}/sprite.json \"variants\")")
+    return s
+
+
 # ---- commands -------------------------------------------------------------------------------
 def cmd_list(args):
     for n in list_sprites():
@@ -69,7 +78,9 @@ def cmd_list(args):
             continue
         anims = ", ".join(f"{k}({len(a.frames)})" for k, a in s.animations.items())
         what = (f"prop ({s.layer}{', solid' if s.solid else ''}{f', scroll {s.scroll:g}' if s.scroll != 1 else ''}"
-                f"{', sliced' if s.slice else ''})  ") if s.kind == "prop" else ""
+                f"{', sliced' if s.slice else ''})  ") if s.kind == "prop" else f"fx ({s.layer})  " if s.kind == "fx" else ""
+        if s.base:
+            what = f"variant of {s.base}  " + what
         print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {what}{anims}")
     for n in lvl.list_levels():
         try:
@@ -155,6 +166,8 @@ def cmd_new(args):
     path = sprites_dir() / args.name
     if path.exists():
         sys.exit(f"{_rel(path)} already exists")
+    if args.name in model.variants():
+        sys.exit(f"{args.name} is already a palette variant of {model.variants()[args.name]}")
     meta: dict = {"name": args.name}
     if args.tileset:
         w, h = _size(args.size or "16")
@@ -170,6 +183,8 @@ def cmd_new(args):
         return _new_ui(args, path, meta)
     if args.prop or args.building:
         return _new_prop(args, path, meta)
+    if args.fx:
+        return _new_fx(args, path, meta)
     args.cls = args.cls or model.VIEW_CLASS[model.game_view()]
     if args.size:
         w, h = _size(args.size)
@@ -242,6 +257,17 @@ def _new_prop(args, path: Path, meta: dict) -> None:
           f"({dw}x{dh}) + window.txt (8x8): a {view}-view building, sliced into 16x16 tiles on export")
 
 
+def _new_fx(args, path: Path, meta: dict) -> None:
+    """A one-shot effect: a few frames that play once, drawn over everything (spawnPixelforgeFx)."""
+    w, h = _size(args.size or "16")
+    meta.update({"type": "fx", "size": [w, h], "origin": [w // 2, h // 2],
+                 "palette": {"k": "outline", "w": "white", "y": "yellow"},
+                 "animations": {"play": {"fps": 15, "frames": ["fx_0", "fx_1", "fx_2"]}}})
+    _write_new(path, meta, {f"fx_{i}": Grid.blank(w, h) for i in range(3)})
+    print(f"created {_rel(path)}/sprite.json and frames/fx_0..2.txt ({w}x{h} effect, plays once at 15 fps, "
+          f"origin at its centre)")
+
+
 def _new_ui(args, path: Path, meta: dict) -> None:
     if args.icons:
         w, h = _size(args.size or "16")
@@ -267,8 +293,8 @@ def _new_ui(args, path: Path, meta: dict) -> None:
 
 def cmd_resize(args):
     """Re-canvas every frame file, keeping the character on its origin (anchor: bottom-centre)."""
-    meta_path = sprites_dir() / args.sprite / "sprite.json"
-    s = Sprite.load(args.sprite)
+    s = _editable(args.sprite)
+    meta_path = s.path / "sprite.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     if args.cls:
         classes = model.size_classes()
@@ -520,7 +546,7 @@ def cmd_import(args):
 
 
 def cmd_dup(args):
-    s = Sprite.load(args.sprite)
+    s = _editable(args.sprite)
     src = s.layer_path(args.src)
     dst = src.parent / f"{args.dst}.txt"   # a part copies to a part, a frame to a frame
     if dst.exists() and not args.force:
@@ -570,7 +596,7 @@ def cmd_paint(args):
     "px 3 4 k; frect 2 2 5 5 s; box 0 0 9 9 k; line 0 0 7 7 k; fill 10 10 a;
      mirror lr; swap a b; shift 1 0; move 8 3 21 17 0 1"   ("." erases)
     """
-    s = Sprite.load(args.sprite)
+    s = _editable(args.sprite)
     g = s.load_layer(args.frame, strict=False)
     for raw in " ".join(args.ops).split(";"):
         parts = raw.split()
@@ -816,6 +842,8 @@ def main(argv=None):
     kind.add_argument("--prop", action="store_true", help="an object: chest, tree, sign, a background accent")
     kind.add_argument("--building", action="store_true", help="a prop made of parts (walls, roof, door, windows), "
                                                               "also exported as tiles")
+    kind.add_argument("--fx", action="store_true", help="a one-shot effect (hit spark, dust puff) the game spawns "
+                                                       "with spawnPixelforgeFx; default 16x16")
     kind.add_argument("--icons", action="store_true", help="a UI atlas: item icons, panels and buttons")
     kind.add_argument("--font", action="store_true", help="a bitmap font (starts from a 5x7 font)")
     q.set_defaults(fn=cmd_new)

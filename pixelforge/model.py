@@ -65,21 +65,51 @@ def palettes_dir() -> Path:
     return root() / "palettes"
 
 
-def list_sprites(kind: str | None = None) -> list[str]:
-    """Every sprite folder, or only those of one kind ("sprite" = characters/items, "tileset")."""
+def _folders() -> list[str]:
     d = sprites_dir()
-    if not d.is_dir():
-        return []
-    names = sorted(p.name for p in d.iterdir() if (p / "sprite.json").is_file())
+    return sorted(p.name for p in d.iterdir() if (p / "sprite.json").is_file()) if d.is_dir() else []
+
+
+def _read_meta(folder: str) -> dict:
+    try:
+        meta = json.loads((sprites_dir() / folder / "sprite.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}   # let Sprite.load report the problem
+    return meta if isinstance(meta, dict) else {}
+
+
+def variants() -> dict[str, str]:
+    """Every palette variant (sprite.json "variants") -> the sprite folder it's drawn from. A folder of the
+    same name wins over a variant (`check` reports the clash)."""
+    folders = _folders()
+    out: dict[str, str] = {}
+    for f in folders:
+        v = _read_meta(f).get("variants")
+        for name in v if isinstance(v, dict) else ():
+            if name not in folders and name not in out:
+                out[name] = f
+    return out
+
+
+def sprite_folder(name: str) -> Path:
+    """The folder a sprite's files live in: its own, or for a variant its base sprite's."""
+    return sprites_dir() / variants().get(name, name)
+
+
+def list_sprites(kind: str | None = None, with_variants: bool = True) -> list[str]:
+    """Every sprite folder, each followed by its palette variants, or only those of one kind
+    ("sprite" = characters, "prop", "fx", "tileset"...)."""
+    folders = _folders()
+    names = []
+    for f in folders:
+        names.append(f)
+        v = _read_meta(f).get("variants") if with_variants else None
+        names += [n for n in (v if isinstance(v, dict) else ()) if n not in folders and n not in names]
     return names if kind is None else [n for n in names if sprite_kind(n) == kind]
 
 
 def sprite_kind(name: str) -> str:
-    try:
-        meta = json.loads((sprites_dir() / name / "sprite.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return "sprite"  # let Sprite.load report the problem
-    return meta.get("type", "sprite") if isinstance(meta, dict) else "sprite"
+    return _read_meta(variants().get(name, name)).get("type", "sprite")
 
 
 def parse_hex(value: str) -> RGBA:
@@ -124,8 +154,10 @@ ROLES = {"hurt": "u", "hit": "x", "none": "n"}  # role -> char in a role grid
 ENTRY_KEYS = {"from", "layers", "flip", "offset", "roll", "replace", "duration", "active"}
 PART_KEYS = {"part", "at", "flip", "replace", "duration", "active"}   # a small grid placed on the canvas
 # sprite: characters (animations). prop: objects, buildings and background accents (animations are
-# states). tileset: terrain tiles. icons: a UI atlas of named images. font: a bitmap font.
-KINDS = ("sprite", "prop", "tileset", "icons", "font")
+# states). fx: one-shot effects (sparks, dust) the game spawns and forgets. tileset: terrain tiles.
+# icons: a UI atlas of named images. font: a bitmap font.
+KINDS = ("sprite", "prop", "fx", "tileset", "icons", "font")
+VARIANT_KEYS = ("palette",)   # what a variant may change
 TILED_KINDS = ("tileset", "icons", "font")   # made of named same-size cells instead of animations
 TILE_COLUMNS = 8  # default tileset sheet width, in tiles
 VIEWS = ("side", "topdown", "overhead")
@@ -237,6 +269,9 @@ class Sprite:
     space_width: int = 3
     line_height: int = 0
     font_problems: list[str] = field(default_factory=list)
+    # palette variants: `base` is the sprite a variant is drawn from; a base lists its `variants`
+    base: str | None = None
+    variants: list[str] = field(default_factory=list)
     _frame_cache: dict[str, Grid] = field(default_factory=dict, repr=False)
 
     @property
@@ -247,7 +282,10 @@ class Sprite:
     # ---- loading ----------------------------------------------------------------------
     @classmethod
     def load(cls, name: str) -> "Sprite":
-        path = sprites_dir() / name
+        """A sprite folder, or a palette variant of one (sprite.json "variants"): the base's frames
+        and animations under the variant's name, with some palette keys mapped to other colors."""
+        base = variants().get(name)
+        path = sprites_dir() / (base or name)
         meta_path = path / "sprite.json"
         if not meta_path.is_file():
             known = ", ".join(list_sprites()) or "(none)"
@@ -256,6 +294,11 @@ class Sprite:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             raise SpriteError(f"{meta_path}: invalid JSON: {e}") from None
+        own_variants = meta.pop("variants", None) or {}
+        if not isinstance(own_variants, dict):
+            raise SpriteError(f"{base or name}: \"variants\" must be {{\"name\": {{\"palette\": {{...}}}}}}")
+        if base:
+            meta = _apply_variant(meta, base, name, own_variants[name])
 
         size_class = meta.get("class")
         cdef: dict = {}
@@ -288,13 +331,14 @@ class Sprite:
             else:
                 raise SpriteError(f"palette key {key!r}: {value!r} is not a hex color or a name in palettes/game.json")
 
-        anims = {}
-        for aname, a in meta.get("animations", {}).items():
-            frames = a.get("frames", [])
-            anims[aname] = Animation(aname, float(a.get("fps", 8)), bool(a.get("loop", True)), frames)
         kind = meta.get("type", "sprite")
         if kind not in KINDS:
             raise SpriteError(f"type {kind!r} must be one of {', '.join(KINDS)}")
+        anims = {}
+        for aname, a in meta.get("animations", {}).items():
+            frames = a.get("frames", [])
+            # an effect plays once and is gone, so its animations don't loop unless they say so
+            anims[aname] = Animation(aname, float(a.get("fps", 8)), bool(a.get("loop", kind != "fx")), frames)
         # the topdown/overhead classes are only for those views, so they imply it
         view = meta.get("view") or (size_class if size_class in ("topdown", "overhead") else game_view())
         if view not in VIEWS:
@@ -319,9 +363,14 @@ class Sprite:
         s = cls(meta.get("name", name), path, w, h, origin, palette_raw, palette, anims,
                 size_class, body, roles, int(meta.get("hit_pad", 0)), int(meta.get("hurt_pad", 0)), anchor,
                 kind, tiles, tile_props, columns, meta.get("sample"), tile_anims, view, stamps=stamps,
-                item_meta=item_meta, autotile=autotile)
+                item_meta=item_meta, autotile=autotile, base=base,
+                variants=[] if base else [n for n in own_variants if variants().get(n) == path.name])
         if kind == "prop":
             s._load_prop(meta)
+        if kind == "fx":   # drawn over everything by default, never solid
+            s.layer = meta.get("layer", "front")
+            if s.layer not in PROP_LAYERS:
+                raise SpriteError(f"layer {s.layer!r} must be one of {', '.join(PROP_LAYERS)}")
         if kind == "font":
             s._load_font(meta)
         return s
@@ -445,8 +494,9 @@ class Sprite:
 
     def body_rect(self) -> tuple[int, int, int, int]:
         """Body box as (x, y, w, h) in frame pixels: standing on the origin (anchor "feet") or
-        centred on it (anchor "center"). A prop's body is its footprint (default: its art's bounds)."""
-        if self.kind == "prop":
+        centred on it (anchor "center"). A prop's body is its footprint (default: its art's bounds), and
+        so is an effect's (it has no physics; the box is only for the dashboard and `render`)."""
+        if self.kind in ("prop", "fx"):
             return self.footprint or self.art_bounds() or (0, 0, self.width, self.height)
         bw, bh = self.body
         top = self.origin[1] - (bh // 2 if self.anchor == "center" else bh)
@@ -618,6 +668,26 @@ class Sprite:
         if key == TRANSPARENT:
             return 0, 0, 0, 0
         return self.palette.get(key, (255, 0, 255, 255))  # magenta = undefined key
+
+
+def _apply_variant(meta: dict, base: str, name: str, spec) -> dict:
+    """The base sprite's sprite.json as the variant sees it: renamed, with its palette overrides. A variant
+    recolors keys the base already has (`"palette": {"g": "blue"}`); it can't add new ones, because no
+    frame would use them."""
+    if not isinstance(spec, dict):
+        raise SpriteError(f"{base}: variants[{name!r}] must be an object, e.g. {{\"palette\": {{\"g\": \"blue\"}}}}")
+    unknown = set(spec) - set(VARIANT_KEYS)
+    if unknown:
+        raise SpriteError(f"{base}: variant {name!r} has unknown keys {sorted(unknown)} (a variant changes "
+                          f"{', '.join(VARIANT_KEYS)})")
+    palette = dict(meta.get("palette", {}))
+    over = spec.get("palette", {})
+    if not isinstance(over, dict):
+        raise SpriteError(f"{base}: variant {name!r}: \"palette\" must map keys to colors")
+    new = sorted(set(over) - set(palette))
+    if new:
+        raise SpriteError(f"{base}: variant {name!r} recolors {new}, which aren't keys in {base}'s palette")
+    return {**meta, "name": name, "palette": {**palette, **over}}
 
 
 ITEM_META_KEYS = ("nine",)   # per-item data that isn't drawing (icons: nine-slice insets)

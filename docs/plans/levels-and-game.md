@@ -294,20 +294,30 @@ showing the princess crossing the gap, with a passing `expect`.
 ---
 
 ## Phase 6: Smaller gaps
-- [ ] **Effects:** `"type": "fx"`: like a prop, but animations are one-shot, there are no hurtboxes, and the
+- [x] **Effects:** `"type": "fx"`: like a prop, but animations are one-shot, there are no hurtboxes, and the
   layer defaults to `front`. Add `spawnPixelforgeFx(scene, x, y, name, anim?)`, which plays the effect and then
   destroys it. Demo `sprites/fx_hit` (spark, 4 frames) and `fx_dust` (landing puff); the side-view controller spawns
   `fx_dust` on land when it exists.
-- [ ] **Variants:** sprite.json `"variants": {"slime_blue": {"palette": {"g": "blue", "G": "navy"}}}` exports
+- [x] **Variants:** sprite.json `"variants": {"slime_blue": {"palette": {"g": "blue", "G": "navy"}}}` exports
   each variant as its own sheet with tags renamed (`slime_blue_idle`). It's listed in `list`, the gallery and the
   dashboard (grouped under the base sprite), and usable in levels.
-- [ ] **Game feel:** `pixelforgeFeel(scene)` → `shake(ms, px)`, `hitStop(ms)` (pause physics and anims briefly),
+- [x] **Game feel:** `pixelforgeFeel(scene)` → `shake(ms, px)`, `hitStop(ms)` (pause physics and anims briefly),
   `flash(sprite, ms)` (`setTintFill` white), `knockback(target, from, speed)`. Use them in the starter's
   attack → hit example.
-- [ ] **Dialog box:** `pixelforgeDialog(scene, {panel: 'ui:panel', font: 'font', text, speed})` makes a nine-slice
+- [x] **Dialog box:** `pixelforgeDialog(scene, {panel: 'ui:panel', font: 'font', text, speed})` makes a nine-slice
   box with typewriter text that pages on the action key. It returns a promise and is triggered by a `sign`/NPC
   object's `props.text` in the starter.
-- [ ] Node tests for each helper; guide sections.
+- [x] Node tests for each helper; guide sections.
+- (Done. `new --fx`; effects are their own index group (`fx`) and dashboard section, and `check` treats their big
+  frame-to-frame changes as expected. Variants are resolved in `Sprite.load` (`model.variants()`,
+  `sprite_folder()`), listed right after their base by `list_sprites()`, recolor existing keys only, and `paint`/
+  `dup`/`resize` refuse them; demo `chest_iron` in the village. `pixelforgeFeel`'s hit stop also holds the player's
+  controller. `pixelforgeDialog` runs in its own scene, pauses the scene that opened it, wraps with Phaser's own
+  word wrap, and reads the player's controller input so `pixelforge play` can page it: playtests get a `dialog`
+  event and a `dialogOpen` field, and no "stuck" note while a box is up. The starter opens a dialog for any prop,
+  sprite or trigger with `props.text`, on touch, once per visit; demo `sign` in the village. Checked on real
+  Phaser with `play --url` against the starter: typewriter, wrap and paging, hit stop + flash + spark + knockback,
+  landing dust.)
 
 ---
 

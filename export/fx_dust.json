@@ -1,0 +1,170 @@
+{
+  "frames": {
+    "0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 62,
+      "pixelforge": {
+        "hurt": [],
+        "hit": []
+      }
+    },
+    "1": {
+      "frame": {
+        "x": 25,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 62,
+      "pixelforge": {
+        "hurt": [],
+        "hit": []
+      }
+    },
+    "2": {
+      "frame": {
+        "x": 50,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 62,
+      "pixelforge": {
+        "hurt": [],
+        "hit": []
+      }
+    },
+    "3": {
+      "frame": {
+        "x": 75,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 62,
+      "pixelforge": {
+        "hurt": [],
+        "hit": []
+      }
+    }
+  },
+  "meta": {
+    "app": "pixelforge",
+    "version": "1.0",
+    "image": "fx_dust.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 99,
+      "h": 8
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "fx_dust_land",
+        "from": 0,
+        "to": 3,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [],
+    "slices": [],
+    "pixelforge": {
+      "sprite": "fx_dust",
+      "kind": "fx",
+      "view": "side",
+      "class": null,
+      "origin": [
+        12,
+        8
+      ],
+      "anchor": "feet",
+      "body": {
+        "x": 7,
+        "y": 6,
+        "w": 10,
+        "h": 2
+      },
+      "animations": {
+        "fx_dust_land": {
+          "anim": "land",
+          "loop": false,
+          "fps": 16.0,
+          "frames": 4
+        }
+      },
+      "fx": {
+        "layer": "front"
+      }
+    }
+  }
+}

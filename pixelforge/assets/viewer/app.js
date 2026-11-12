@@ -75,6 +75,7 @@ const TYPES = [   // asset types the dashboard knows; new kinds slot in here
   { type: 'level', label: 'Levels', icon: 'map', noun: 'level' },
   { type: 'sprite', label: 'Sprites', icon: 'box', noun: 'sprite' },
   { type: 'prop', label: 'Props & buildings', icon: 'box', noun: 'prop' },
+  { type: 'fx', label: 'Effects', icon: 'box', noun: 'effect' },
   { type: 'tileset', label: 'Tilesets', icon: 'tiles', noun: 'tileset', cells: 'tiles' },
   { type: 'icons', label: 'UI & icons', icon: 'image', noun: 'icon set', cells: 'icons' },
   { type: 'font', label: 'Fonts', icon: 'tiles', noun: 'font', cells: 'glyphs' },
@@ -82,8 +83,8 @@ const TYPES = [   // asset types the dashboard knows; new kinds slot in here
 const typeLabel = (t) => TYPES.find((x) => x.type === t)?.label ?? 'Assets';
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const typeInfo = (a) => TYPES.find((x) => x.type === a?.type) ?? TYPES[0];
-// sprites and props have animations (a prop's are its states); the other kinds are grids of named cells
-const animated = (a) => a?.type === 'sprite' || a?.type === 'prop';
+// sprites, props and effects have animations (a prop's are its states); the other kinds are grids of named cells
+const animated = (a) => a?.type === 'sprite' || a?.type === 'prop' || a?.type === 'fx';
 
 // ---------- data ----------
 async function api(path, opts = {}) {
@@ -490,7 +491,8 @@ function renderNav() {
     for (const a of g.items) {
       const n = activeCrits((c) => c.target.asset === a.name);
       const working = n.some((c) => c.status === 'working');
-      html += `<a class="asset-row ${r.page === 'asset' && r.name === a.name ? 'on' : ''}" href="#/a/${enc(a.name)}">
+      html += `<a class="asset-row ${r.page === 'asset' && r.name === a.name ? 'on' : ''} ${a.variantOf ? 'variant' : ''}" href="#/a/${enc(a.name)}"
+        ${a.variantOf ? `title="A palette variant of ${esc(a.variantOf)}"` : ''}>
         ${a.type === 'error' ? `<span class="warn" style="width:24px;display:grid;place-items:center">${icon('alert')}</span>` : `<canvas width="48" height="48" data-nav="${esc(a.name)}"></canvas>`}
         <span class="nm">${esc(a.name)}</span>${n.length ? `<span class="badge ${working ? 'working' : ''}" title="${n.length} open">${n.length}</span>` : ''}</a>`;
     }
@@ -537,7 +539,8 @@ function renderTop() {
     crumbs = `<a href="#/">${typeLabel(a?.type)}</a><span class="sep">/</span><span class="here">${esc(r.name)}</span>`;
     if (a?.type === 'level') meta = `<span class="chip">${esc(a.view)}</span><span class="chip num">${a.cells[0]}×${a.cells[1]} tiles</span>` +
       `<span class="chip num">${a.screens.length} screen${a.screens.length === 1 ? '' : 's'}</span>`;
-    else if (animated(a)) meta = `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}${a.prop ? propChips(a) : ''}<span class="chip num">${a.w}×${a.h}</span>`;
+    else if (animated(a)) meta = `${a.variantOf ? `<a class="chip" href="#/a/${enc(a.variantOf)}" title="Its frames are ${esc(a.variantOf)}'s, recolored">variant of ${esc(a.variantOf)}</a>` : ''}` +
+      `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}${a.prop ? propChips(a) : ''}${a.fx ? `<span class="chip">plays once · ${esc(a.fx.layer)}</span>` : ''}<span class="chip num">${a.w}×${a.h}</span>`;
     else if (a && a.type !== 'error') meta = `<span class="chip num">${a.tiles.length} ${typeInfo(a).cells}</span><span class="chip num">${a.w}×${a.h}</span>`;
   }
   $('#top').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb">${crumbs}</nav>` +
@@ -631,7 +634,7 @@ function overviewPage(page) {
     for (const a of items) {
       const n = activeCrits((c) => c.target.asset === a.name).length;
       const noun = a.type === 'prop' ? 'state' : 'animation';
-      const sub = a.type === 'level' ? `${a.cells[0]}×${a.cells[1]} tiles · ${a.view} · ${a.objects.length} object${a.objects.length === 1 ? '' : 's'}`
+      const sub = a.variantOf ? `variant of ${a.variantOf} · ${a.anims.length} ${noun}${a.anims.length === 1 ? '' : 's'}` : a.type === 'level' ? `${a.cells[0]}×${a.cells[1]} tiles · ${a.view} · ${a.objects.length} object${a.objects.length === 1 ? '' : 's'}`
         : animated(a) ? `${a.anims.length} ${noun}${a.anims.length === 1 ? '' : 's'}${a.class ? ` · ${a.class}` : ''}${a.prop ? ` · ${a.prop.layer}` : ''}`
         : `${a.tiles.length} ${typeInfo(a).cells} · ${a.w}×${a.h}`;
       html += `<a class="tile" href="#/a/${enc(a.name)}"><div class="art"><canvas data-card="${esc(a.name)}"></canvas></div>
@@ -871,7 +874,7 @@ function renderSpriteTabs(a, anim) {
 
 // characters spar in phaser.html; top-down props stand on a tileset's sample map in tilemap.html,
 // side-view props on the platformer's ground
-const hasGame = (a) => a.type !== 'prop' || a.view === 'side' || [...S.assets.values()].some((x) => x.type === 'tileset');
+const hasGame = (a) => a.type !== 'fx' && (a.type !== 'prop' || a.view === 'side' || [...S.assets.values()].some((x) => x.type === 'tileset'));
 
 // tileset --------------------------------------------------------------
 function tilesetPage(page, a) {

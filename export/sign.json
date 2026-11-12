@@ -1,0 +1,100 @@
+{
+  "frames": {
+    "0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "duration": 125,
+      "pixelforge": {
+        "hurt": [
+          [
+            1,
+            2,
+            14,
+            14
+          ]
+        ],
+        "hit": []
+      }
+    }
+  },
+  "meta": {
+    "app": "pixelforge",
+    "version": "1.0",
+    "image": "sign.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 16,
+      "h": 16
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "sign_idle",
+        "from": 0,
+        "to": 0,
+        "direction": "forward",
+        "color": "#000000ff"
+      }
+    ],
+    "layers": [],
+    "slices": [],
+    "pixelforge": {
+      "sprite": "sign",
+      "kind": "prop",
+      "view": "topdown",
+      "class": null,
+      "origin": [
+        8,
+        16
+      ],
+      "anchor": "feet",
+      "body": {
+        "x": 6,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "animations": {
+        "sign_idle": {
+          "anim": "idle",
+          "loop": true,
+          "fps": 8.0,
+          "frames": 1
+        }
+      },
+      "prop": {
+        "layer": "world",
+        "scroll": 1.0,
+        "solid": true,
+        "footprint": [
+          6,
+          12,
+          4,
+          4
+        ],
+        "ysort": true,
+        "tiles": null
+      }
+    }
+  }
+}

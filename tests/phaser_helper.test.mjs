@@ -128,10 +128,11 @@ import { loadPixelforgeAll, createPixelforgeAll, addPixelforgePlayer, pixelforge
   queued.length = 0;
   handlers.filecomplete('other', 'json', {});
   check('other files are ignored', queued, []);
-  handlers.filecomplete('pixelforge-index', 'json', { sprites: ['hero', 'already'], props: ['chest'], tilesets: ['terrain'],
-    icons: ['ui'], fonts: ['font'], levels: ['village'] });
+  handlers.filecomplete('pixelforge-index', 'json', { sprites: ['hero', 'already'], props: ['chest'], fx: ['fx_hit'],
+    tilesets: ['terrain'], icons: ['ui'], fonts: ['font'], levels: ['village'] });
   check('then every asset by kind', queued, [
     ['aseprite', 'hero', 'x/hero.png', 'x/hero.json'], ['aseprite', 'chest', 'x/chest.png', 'x/chest.json'],
+    ['aseprite', 'fx_hit', 'x/fx_hit.png', 'x/fx_hit.json'],
     ['image', 'terrain', 'x/terrain.png'], ['json', 'terrain', 'x/terrain.json'],
     ['aseprite', 'ui', 'x/ui.png', 'x/ui.json'], ['font', 'font', 'x/font.png', 'x/font.xml'],
     ['level', 'village', 'x/levels/village.json']]);
@@ -426,4 +427,130 @@ import { installPixelforgePlay } from '../pixelforge/assets/phaser/pixelforge.js
   const again = installPixelforgePlay(scene, { name: 'village', player: player2 });
   const st = again.state();
   check('play: a restart re-attaches the same hook', [again === play, st.level, st.x], [true, 'village', 50]);
+}
+
+// ---- effects: spawnPixelforgeFx, and the side controller's landing dust ------------------------------
+import { spawnPixelforgeFx, pixelforgeFeel, pixelforgePages, buildPixelforgeDialog, pixelforgeDialog,
+         PIXELFORGE_DIALOG } from '../pixelforge/assets/phaser/pixelforge.js';
+const fxSprite = (x, y, k) => {
+  const s = { x, y, k, ev: {}, destroyed: false, setFlipX(f) { s.flipX = f; return s; }, setRotation(r) { s.rot = r; return s; },
+    setDepth(d) { s.depth = d; return s; }, once(e, f) { s.ev[e] = f; return s; }, play(c) { s.played = c; return s; },
+    destroy() { s.destroyed = true; } };
+  return s;
+};
+{
+  const fxScene = { cache: { json: { get: () => ({ meta: { pixelforge: { kind: 'fx', animations: { spark_hit: {}, spark_big: {} },
+    fx: { layer: 'front' } } } }) } }, anims: { exists: () => true }, add: { sprite: fxSprite } };
+  const s = spawnPixelforgeFx(fxScene, 10, 20, 'spark', undefined, { flipX: true });
+  check('fx: plays its first animation once, over everything', [s.played, s.depth, s.flipX], [{ key: 'spark_hit', repeat: 0 }, 10001, true]);
+  s.ev.animationcomplete();
+  check('fx: destroys itself when it ends', s.destroyed, true);
+  check('fx: a named animation', spawnPixelforgeFx(fxScene, 0, 0, 'spark', 'big').played.key, 'spark_big');
+  let threw = false; try { spawnPixelforgeFx(fxScene, 0, 0, 'spark', 'nope'); } catch { threw = true; }
+  check('fx: an unknown animation throws', threw, true);
+}
+{
+  const { scene, tick } = playerWorld('d', { d_idle: {}, d_jump_land: {} });
+  const base = scene.cache.json.get;
+  scene.cache.json.get = (k) => (k === 'fx_dust' ? { meta: { pixelforge: { kind: 'fx', animations: { fx_dust_land: {} } } } } : base(k));
+  const dust = [];
+  scene.add = { sprite: (x, y, k) => { const s = fxSprite(x, y, k); dust.push(s); return s; } };
+  const p = addPixelforgePlayer(scene, 40, 100, 'd');
+  p.body.blocked.down = false; tick(100);
+  check('side: no dust in the air', dust.length, 0);
+  p.body.blocked.down = true; tick(116);
+  check('side: lands in a puff of fx_dust at the feet', dust.map((d) => [d.k, d.x, d.y, d.played.key]), [['fx_dust', 40, 100, 'fx_dust_land']]);
+  scene.pixelforgeStopped = true;
+  p.controller.override = { right: true };
+  tick(132);
+  check('a hit stop holds the controller', p.body.velocity.x, 0);
+}
+
+// ---- pixelforgeFeel: shake, hit stop, flash, knockback ------------------------------------------------
+{
+  const timers = [], shakes = [];
+  const world = { paused: false, gravity: { y: 0 }, pause() { this.paused = true; }, resume() { this.paused = false; } };
+  const actor = (playing) => ({ active: true, anims: { isPlaying: playing, paused: false, pause() { this.paused = true; }, resume() { this.paused = false; } } });
+  const a = actor(true), b = actor(false);
+  const scene = { events: { once() {} }, physics: { world }, children: { list: [a, b] },
+    cameras: { main: { width: 320, height: 180, shake: (...args) => shakes.push(args) } },
+    time: { delayedCall: (ms, f) => { const tm = { ms, f, removed: false, remove() { this.removed = true; } }; timers.push(tm); return tm; } } };
+  const feel = pixelforgeFeel(scene);
+  check('feel: chains', feel.shake(100, 2), feel);
+  check('feel: shake measured in game pixels', shakes[0], [100, { x: 2 / 320, y: 2 / 180 }, true]);
+  feel.hitStop(60);
+  check('feel: hit stop pauses physics and the playing animations', [world.paused, a.anims.paused, b.anims.paused, scene.pixelforgeStopped],
+    [true, true, false, true]);
+  feel.hitStop(80);
+  check('feel: a second hit stop extends the first', [timers[0].removed, timers[1].ms], [true, 80]);
+  timers[1].f();
+  check('feel: then everything resumes', [world.paused, a.anims.paused, scene.pixelforgeStopped], [false, false, false]);
+  const spr = { active: true, tint: null, setTintFill(c) { this.tint = c; return this; }, clearTint() { this.tint = null; return this; } };
+  feel.flash(spr, 80);
+  check('feel: flash paints it white', [spr.tint, timers.at(-1).ms], [0xffffff, 80]);
+  timers.at(-1).f();
+  check('feel: then clears', spr.tint, null);
+  const body = (g) => ({ allowGravity: g, gravity: { y: g ? 900 : 0 }, velocity: {}, setVelocity(x, y) { this.velocity = { x, y }; return this; } });
+  const hero = { x: 100, y: 50, body: body(true), controller: { stun(ms) { this.stunned = ms; } } };
+  feel.knockback(hero, { x: 120, y: 50 }, 140, { lift: 160 });
+  check('feel: side-view knockback goes sideways and up, and stuns the controller', [hero.body.velocity, hero.controller.stunned],
+    [{ x: -140, y: -160 }, 200]);
+  const slime = { x: 103, y: 54, body: body(false) };
+  feel.knockback(slime, { x: 100, y: 50 }, 100);
+  check('feel: top-down knockback goes straight away', slime.body.velocity, { x: 60, y: 80 });
+}
+
+// ---- pixelforgeDialog: pages, typewriter, the action key ----------------------------------------------
+{
+  check('dialog pages: wrapped rows, `lines` per page, each string starts a page',
+    pixelforgePages(['a b c', 'd'], 2, (s) => s.split(' ').join('\n')), ['a\nb', 'c', 'd']);
+  check('dialog pages: nothing is one empty page', pixelforgePages(undefined, 3), ['']);
+
+  const made = [], emitted = [], stopped = [];
+  const obj = (kind, extra = {}) => { const o = { kind, destroyed: false, visible: true, setOrigin() { return o; }, destroy() { o.destroyed = true; },
+    setVisible(v) { o.visible = v; return o; }, setPosition(x, y) { o.pos = [x, y]; return o; }, ...extra }; made.push(o); return o; };
+  const scene = {
+    scale: { width: 320, height: 180 },
+    cache: { bitmapFont: { get: () => ({ data: { lineHeight: 10 } }) }, json: { get: () => ({ meta: { pixelforge: { nine: { panel: [4, 4, 4, 5] } } } }) } },
+    add: {
+      nineslice: (x, y, sheet, icon, w, h) => obj('panel', { box: [x, y, w, h] }),
+      bitmapText: (x, y, font) => obj('text', { at: [x, y], font, text: '', setTint(c) { this.tint = c; return this; },
+        setMaxWidth() { return this; }, setText(s) { this.text = s; return this; }, getTextBounds() { return { wrappedText: this.text }; } }),
+      graphics: () => obj('more', { fillStyle() { return this; }, fillTriangle() { return this; } }),
+    },
+    scene: { stop: () => stopped.push('stop') },
+  };
+  let resumed = false;
+  const owner = { events: { emit: (e) => emitted.push(e) }, scene: { isPaused: () => true, resume: () => { resumed = true; } } };
+  const ctl = { cur: {}, prev: null, readInput() { return { attack: false, jump: false, ...this.cur }; } };
+  let result = null;
+  const o = { panel: 'ui:panel', font: 'font', tint: '#181425', speed: 40, lines: 3, margin: 4, padding: 6, position: 'bottom',
+              text: ['Hello there', 'Bye'], name: 'sign', player: { controller: ctl } };
+  const d = buildPixelforgeDialog(scene, { o, resolve: (v) => { result = v; }, owner });
+  const [panel, label] = made;
+  check('dialog: a box along the bottom, 3 lines tall', panel.box, [4, 134, 312, 42]);
+  check('dialog: dark ink inside the padding', [label.at, label.tint], [[10, 140], 0x181425]);
+  check('dialog: opening is announced', emitted, ['pixelforge-dialog']);
+  d.update(100);
+  check('dialog: types 40 characters a second', label.text, 'Hell');
+  const press = () => { ctl.cur = { attack: true }; d.update(16); ctl.cur = {}; d.update(16); };
+  press();
+  check('dialog: the action key shows the whole page', label.text, 'Hello there');
+  check('dialog: the more-arrow blinks on', made[2].visible, true);
+  press();
+  check('dialog: then turns the page', [d.page, label.text], [1, '']);
+  ctl.cur = { jump: true }; d.update(1000); ctl.cur = {}; d.update(16);
+  check('dialog: jump works too (finishes the page)', label.text, 'Bye');
+  check('dialog: no arrow on the last page', made[2].visible, false);
+  ctl.cur = { attack: true }; d.update(16);
+  check('dialog: closes on the last press, resumes the level, resolves true',
+    [result, resumed, stopped, emitted.at(-1), made.every((m) => m.destroyed)], [true, true, ['stop'], 'pixelforge-dialog-close', true]);
+  check('dialog: the closing press is remembered, so it does not also attack', ctl.prev.attack, true);
+
+  const calls = [];
+  const levelScene = { scene: { key: 'level', get: () => null, add: (k, cfg, start, data) => calls.push(['add', k, start, data.o.speed]),
+    bringToTop: (k) => calls.push(['top', k]), pause: () => calls.push(['pause']) } };
+  const promise = pixelforgeDialog(levelScene, { text: 'Hi', speed: 0 });
+  check('dialog: its own scene on top, and the level waits', calls, [['add', PIXELFORGE_DIALOG, true, 0], ['top', PIXELFORGE_DIALOG], ['pause']]);
+  check('dialog: returns a promise', typeof promise.then, 'function');
 }

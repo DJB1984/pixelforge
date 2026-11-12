@@ -67,7 +67,9 @@ def build_sheet(sprite: Sprite, padding: int = 1) -> tuple[Image.Image, dict]:
             "pixelforge": {"sprite": sprite.name, "kind": sprite.kind, "view": sprite.view,
                            "class": sprite.size_class, "origin": list(sprite.origin),
                            "anchor": sprite.anchor, "body": dict(zip("xywh", sprite.body_rect())),
-                           "animations": anim_info, **({"prop": prop_info(sprite)} if sprite.kind == "prop" else {})},
+                           "animations": anim_info, **({"prop": prop_info(sprite)} if sprite.kind == "prop" else {}),
+                           **({"fx": {"layer": sprite.layer}} if sprite.kind == "fx" else {}),
+                           **({"variant_of": sprite.base} if sprite.base else {})},
         },
     }
     return img, data
@@ -289,7 +291,8 @@ def export_sprite(sprite: Sprite, out_dir: Path | None = None, padding: int = 1)
     return paths
 
 
-INDEX_GROUPS = ("sprites", "props", "tilesets", "icons", "fonts", "levels")
+INDEX_GROUPS = ("sprites", "props", "fx", "tilesets", "icons", "fonts", "levels")
+KIND_GROUP = {"prop": "props", "fx": "fx", "tileset": "tilesets", "icons": "icons", "font": "fonts"}
 
 
 def index_group(data: dict) -> str:
@@ -297,7 +300,7 @@ def index_group(data: dict) -> str:
     if data.get("type") == "tileset":
         return "tilesets"
     kind = data.get("pixelforge", {}).get("kind") or data.get("meta", {}).get("pixelforge", {}).get("kind")
-    return {"prop": "props", "icons": "icons", "font": "fonts"}.get(kind, "sprites")
+    return KIND_GROUP.get(kind, "sprites")
 
 
 def write_index(out_dir: Path | None = None) -> Path:

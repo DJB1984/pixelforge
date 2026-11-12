@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import fnmatch
 import itertools
+import json
 from dataclasses import dataclass
 
 from .boxes import frame_boxes
@@ -59,6 +60,13 @@ def check_sprite(name: str) -> list[Issue]:
         off = [k for k, c in s.palette.items() if c not in game_colors]
         if off:
             issues.append(Issue("info", f"{name}/palette", f"keys not from palettes/game.json: {' '.join(off)}"))
+    if s.base:   # the frames are the base sprite's, checked with it
+        return issues
+    raw = json.loads((s.path / "sprite.json").read_text(encoding="utf-8")).get("variants") or {}
+    for v in raw:
+        if v not in s.variants:
+            issues.append(Issue("warn", f"{name}/variants", f"variant {v!r} has the same name as another sprite "
+                                                           f"(sprites/{v}/ or another variant), which wins"))
 
     # ---- frame files ----
     used: set[str] = set()
@@ -150,6 +158,9 @@ def check_sprite(name: str) -> list[Issue]:
         if not a.frames:
             issues.append(Issue("error", where, "animation has no frames"))
             continue
+        if s.kind == "fx" and a.loop:
+            issues.append(Issue("warn", where, "an effect that loops never ends, so spawnPixelforgeFx never removes it "
+                                               "(drop \"loop\": true, or make it a prop)"))
         grids: list[Grid | None] = []
         for i, entry in enumerate(a.frames):
             try:
@@ -186,7 +197,7 @@ def check_sprite(name: str) -> list[Issue]:
         # Centre-anchored (overhead) sprites have no feet to plant, so these checks don't apply,
         # and neither do they to props floating in the background (clouds, birds).
         bottoms = []
-        plants = s.anchor == "feet" and not (s.kind == "prop" and s.layer == "back")
+        plants = s.anchor == "feet" and s.kind != "fx" and not (s.kind == "prop" and s.layer == "back")
         for i, g in valid if plants else []:
             _, roles = s.resolve_roles(a.frames[i])
             body = [y for y, row in enumerate(roles.cells) if ROLES["hurt"] in row]
@@ -214,10 +225,12 @@ def check_sprite(name: str) -> list[Issue]:
             moved = min(len(gi.offset(dx, dy).diff(gj)) for dx in range(-2, 3) for dy in range(-2, 3))
             if union and moved / union > BIG_DIFF_RATIO:
                 # snapping into/out of an active (smear/strike) frame is the point of an attack
-                snap = a.active(i) or a.active(j)
+                # and so is an effect bursting and fading in a few fast frames
+                snap = a.active(i) or a.active(j) or s.kind == "fx"
                 issues.append(Issue("info" if snap else "warn", where,
                                     f"frames {i}->{j} change {moved}/{union} pixels ({moved / union:.0%}) even "
-                                    f"after aligning shifts; " + ("expected for an active attack frame" if snap
+                                    f"after aligning shifts; " + (("expected for an effect" if s.kind == "fx" else
+                                                                   "expected for an active attack frame") if snap
                                                                   else "motion may look like a jump cut")))
             if changed == 0 and len(grids) > 1:
                 issues.append(Issue("info", where, f"frames {i} and {j} are identical"))

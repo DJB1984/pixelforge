@@ -1,0 +1,44 @@
+{
+  "name": "fx_hit",
+  "type": "fx",
+  "size": [
+    16,
+    16
+  ],
+  "origin": [
+    8,
+    8
+  ],
+  "palette": {
+    "w": "white",
+    "y": "yellow",
+    "a": "amber",
+    "o": "orange"
+  },
+  "animations": {
+    "hit": {
+      "frames": [
+        {
+          "from": "flash",
+          "duration": 40
+        },
+        {
+          "from": "burst",
+          "duration": 60
+        },
+        {
+          "from": "rays",
+          "duration": 60
+        },
+        {
+          "from": "rays",
+          "replace": {
+            "y": "a",
+            "a": "o"
+          },
+          "duration": 60
+        }
+      ]
+    }
+  }
+}

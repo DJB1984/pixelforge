@@ -314,10 +314,11 @@ async function init() {
   const terrains = tilesets.filter((t) => !t.kind || t.kind === 'tileset'), uiSets = tilesets.filter((t) => t.kind && t.kind !== 'tileset');
   const tileCount = terrains.reduce((a, t) => a + t.tiles.length, 0);
   $('game').textContent = DATA.game;
-  const nChars = sprites.filter((s) => s.kind !== 'prop').length, nProps = sprites.length - nChars;
+  const nProps = sprites.filter((s) => s.kind === 'prop').length, nFx = sprites.filter((s) => s.kind === 'fx').length;
+  const nChars = sprites.length - nProps - nFx;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   $('summary').textContent = (levels.length ? `${plural(levels.length, 'level')} · ` : '') +
-    `${plural(nChars, 'character')} · ` + (nProps ? `${plural(nProps, 'prop')} · ` : '') +
+    `${plural(nChars, 'character')} · ` + (nProps ? `${plural(nProps, 'prop')} · ` : '') + (nFx ? `${plural(nFx, 'effect')} · ` : '') +
     `${animCount} animations · ${frameCount} frames · ` +
     (terrains.length ? `${plural(terrains.length, 'tileset')} · ${tileCount} tiles · ` : '') +
     (uiSets.length ? `${plural(uiSets.length, 'UI set')} · ` : '') +
@@ -331,7 +332,7 @@ async function init() {
     sec.className = 'char';
     sec.id = s.name;
     sec.innerHTML = `<div class="char-head"><h2>${s.name}</h2>
-      <span class="meta">${s.prop ? `prop · ${s.prop.layer}${s.prop.solid ? ' · solid' : ''}${s.prop.scroll !== 1 ? ` · scroll ${s.prop.scroll}` : ''} · ` : ''}${s.class ? s.class + ' · ' : ''}${s.w}×${s.h} px canvas · ${s.prop ? 'footprint' : 'body'} ${s.body[2]}×${s.body[3]} · ${s.palette.length} colors · ${s.anims.length} ${s.prop ? 'states' : 'animations'}</span>
+      <span class="meta">${s.variantOf ? `variant of <a href="#${s.variantOf}">${s.variantOf}</a> · ` : ''}${s.kind === 'fx' ? 'effect · plays once · ' : ''}${s.prop ? `prop · ${s.prop.layer}${s.prop.solid ? ' · solid' : ''}${s.prop.scroll !== 1 ? ` · scroll ${s.prop.scroll}` : ''} · ` : ''}${s.class ? s.class + ' · ' : ''}${s.w}×${s.h} px canvas · ${s.prop ? 'footprint' : 'body'} ${s.body[2]}×${s.body[3]} · ${s.palette.length} colors · ${s.anims.length} ${s.prop ? 'states' : 'animations'}</span>
       <div class="swatches">${s.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
       <div class="grid"></div>`;
     const grid = sec.querySelector('.grid');
@@ -359,7 +360,8 @@ async function init() {
   if (reduceMotion) $('playall').textContent = 'Play all';
   $('boxes').onchange = () => tiles.forEach(drawTile);
 
-  const chars = sprites.filter((s) => s.kind !== 'prop'), props = sprites.filter((s) => s.kind === 'prop');
+  const chars = sprites.filter((s) => s.kind === 'sprite' || !s.kind), props = sprites.filter((s) => s.kind === 'prop');
+  const fx = sprites.filter((s) => s.kind === 'fx');
   const first = chars[0];
   $('usage').textContent = [
     `// Phaser 3, with pixelArt: true. Files: export/<name>.png + export/<name>.json + export/pixelforge.js`,
@@ -374,6 +376,11 @@ async function init() {
       `import { addPixelforgeProp } from './export/pixelforge.js';`,
       `preload() { ${props.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
       `create()  { ${props.map((s, i) => `addPixelforgeProp(this, ${40 + i * 60}, 120, '${s.name}');`).join(' ')} }`] : []),
+    ...(fx.length ? [
+      `// effects play once where you spawn them, then remove themselves`,
+      `import { spawnPixelforgeFx } from './export/pixelforge.js';`,
+      `preload() { ${fx.map((s) => `loadPixelforge(this, '${s.name}');`).join(' ')} }`,
+      `onHit(target) { spawnPixelforgeFx(this, target.x, target.y - 12, '${fx[0].name}'); }`] : []),
     ...tilesets.filter((t) => t.kind === 'icons').flatMap((t) => [
       `// icons ${t.name}: one image per name; nine-slice panels stretch to any size`,
       `import { loadPixelforgeIcons, addPixelforgePanel } from './export/pixelforge.js';`,

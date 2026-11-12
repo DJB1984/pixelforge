@@ -16,7 +16,7 @@ Script: one action per line or `;`, `#` starts a comment.
     expect onGround     a state field is truthy; `expect not onGround`
     expect x > 200      compare a field: x y vx vy onGround facing anim level (and the game's extra fields)
     expect anim == princess_run    (== != > < >= <=; `has` for lists: `expect inventory has key`)
-    expect trigger door an event happened so far (trigger hit jump land attack fell), optionally one
+    expect trigger door an event happened so far (trigger hit jump land attack fell dialog), optionally one
     expect no fell      whose name, type or target matches; `no`/`not` for never
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ from PIL import Image, ImageDraw
 
 FRAME_MS = 1000 / 60
 KEYS = ("left", "right", "up", "down", "jump", "run", "attack")
-EVENTS = ("trigger", "hit", "jump", "land", "attack", "fell")
+EVENTS = ("trigger", "hit", "jump", "land", "attack", "fell", "dialog")
 OPS = ("==", "!=", ">=", "<=", ">", "<", "=", "has")
 CHUNK = 6                 # frames per step call: the trace's resolution (100 ms)
 STUCK_FRAMES = 60         # held movement this long without moving 2px is "stuck"
@@ -311,7 +311,7 @@ def notes(run: Run, level_size: tuple[int, int] | None = None) -> list[str]:
     reported = None
     for e in run.trace:
         held = tuple(sorted(set(e["input"]) & moves))
-        if not held:
+        if not held or e.get("dialogOpen"):   # a dialog box holds the player on purpose
             anchor = reported = None
             continue
         if anchor is None or anchor[0] != held or abs(e["x"] - anchor[1]["x"]) + abs(e["y"] - anchor[1]["y"]) >= 2:
@@ -354,6 +354,10 @@ def notes(run: Run, level_size: tuple[int, int] | None = None) -> list[str]:
         out.append("triggers: " + ", ".join(f"{_trigger(ev)} at {ev['t'] / 1000:.2f}s" for ev in trig))
     else:
         out.append("triggers: none fired")
+    talks = [ev for ev in run.events if ev["type"] == "dialog"]
+    if talks:
+        out.append("dialogs: " + ", ".join(f"{ev.get('name') or '?'} at {ev['t'] / 1000:.2f}s "
+                                           f"({((ev.get('text') or '').splitlines() or [''])[0][:40]!r})" for ev in talks))
     hits = [ev for ev in run.events if ev["type"] == "hit"]
     if hits:
         out.append("hits: " + ", ".join(f"{ev.get('target') or '?'} at {ev['t'] / 1000:.2f}s" for ev in hits))

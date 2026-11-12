@@ -1,0 +1,28 @@
+{
+  "name": "fx_dust",
+  "type": "fx",
+  "size": [
+    24,
+    8
+  ],
+  "origin": [
+    12,
+    8
+  ],
+  "palette": {
+    "w": "white",
+    "l": "light_gray",
+    "G": "gray"
+  },
+  "animations": {
+    "land": {
+      "fps": 16,
+      "frames": [
+        "puff_0",
+        "puff_1",
+        "puff_2",
+        "puff_3"
+      ]
+    }
+  }
+}

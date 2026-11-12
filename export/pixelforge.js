@@ -305,6 +305,31 @@ export function keepPixelforgeDepth(scene, sprites) {
   return () => scene.events.off('update', tick);
 }
 
+// ---- effects ("type": "fx"): sparks, dust puffs, explosions --------------------------------------
+//   preload() { loadPixelforge(this, 'fx_hit'); }                     // loadPixelforgeAll loads them too
+//   onHit(target) { spawnPixelforgeFx(this, target.x, target.y - 12, 'fx_hit'); }
+// An effect plays one animation once at (x, y) (its origin) and then destroys itself. Its layer (front by
+// default) sets the depth: over the characters, or "world" to sort by y among them.
+
+// Plays `anim` (default: its first) once. opts: flipX, rotation, depth. Returns the sprite (it's gone
+// after its last frame; listen for 'destroy' to chain something).
+export function spawnPixelforgeFx(scene, x, y, name, anim, { flipX = false, rotation = 0, depth } = {}) {
+  const pf = scene.cache.json.get(name)?.meta?.pixelforge;
+  if (!pf) throw new Error(`pixelforge: '${name}' isn't loaded (loadPixelforge(this, '${name}') in preload)`);
+  const keys = Object.keys(pf.animations);
+  const key = anim ? `${name}_${anim}` : keys[0];
+  if (!keys.includes(key)) throw new Error(`pixelforge: effect '${name}' has no animation '${anim}' (known: ${keys.join(', ')})`);
+  if (!keys.every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
+  const layer = pf.fx?.layer ?? 'front';
+  const fx = scene.add.sprite(x, y, name).setFlipX(flipX).setRotation(rotation);
+  fx.setDepth(depth ?? (layer === 'world' ? y : PROP_DEPTH[layer] + 1));
+  fx.once('animationcomplete', () => fx.destroy());
+  fx.play({ key, repeat: 0 });   // once, even if sprite.json says loop
+  return fx;
+}
+
+const isFx = (scene, name) => scene.cache.json.get(name)?.meta?.pixelforge?.kind === 'fx';
+
 // ---- UI: icon atlases ("type": "icons") and bitmap fonts ("type": "font") -------------------
 //   preload() { loadPixelforgeIcons(this, 'items'); loadPixelforgeFont(this, 'font'); }
 //   create()  {
@@ -363,6 +388,7 @@ export function queuePixelforgeIndex(scene, index, baseUrl = 'export/') {
   const tex = (n) => scene.textures?.exists(n);
   each('sprites', loadPixelforge, tex);
   each('props', loadPixelforge, tex);
+  each('fx', loadPixelforge, tex);
   each('tilesets', loadPixelforgeTiles, tex);
   each('icons', loadPixelforgeIcons, tex);
   each('fonts', loadPixelforgeFont, tex);
@@ -375,10 +401,10 @@ export function loadPixelforgeLevel(scene, name, baseUrl = 'export/') {
   scene.load.tilemapTiledJSON(name, `${baseUrl}levels/${name}.json`);
 }
 
-// Animations for every sprite and prop in the loaded index. Returns their names.
+// Animations for every sprite, prop and effect in the loaded index. Returns their names.
 export function createPixelforgeAll(scene) {
   const index = scene.cache.json.get(PIXELFORGE_INDEX) ?? {};
-  const names = [...(index.sprites ?? []), ...(index.props ?? [])];
+  const names = [...(index.sprites ?? []), ...(index.props ?? []), ...(index.fx ?? [])];
   for (const name of names) {
     const tags = Object.keys(scene.cache.json.get(name)?.meta?.pixelforge?.animations ?? {});
     if (!tags.every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
@@ -460,7 +486,8 @@ export function addPixelforgeHud(scene, items) {
 //   hero.on('pixelforge-land', () => dust());                          // also pixelforge-jump, -attack
 //
 // side:     walk, run (Shift), coyote time, jump buffer, variable jump height; idle/walk/run/
-//           jump_rise/jump_fall/jump_land/attack picked from the motion (each falls back to a simpler one)
+//           jump_rise/jump_fall/jump_land/attack picked from the motion (each falls back to a simpler one);
+//           lands in a puff of the 'fx_dust' effect when one is loaded (opts.dust: another name, or false)
 // topdown:  4-direction walk with playFacing, feet-only body, attack_<dir>, depth = y
 // overhead: 8-direction, rotated to face where it goes, circle body from the body box, attack
 // Input: sprite.controller.input = {left, right, up, down, jump, run, attack}, read from the keyboard
@@ -528,7 +555,7 @@ export class PixelforgeController {
 
   update(time) {
     const s = this.sprite;
-    if (!s.active || !s.body) return;
+    if (!s.active || !s.body || s.scene?.pixelforgeStopped) return;   // a hit stop holds everything
     if (time < (this.stunnedUntil ?? 0)) { this.prev = { ...NO_INPUT }; return; }
     this.input = this.readInput();
     if (this.view === 'side') this.updateSide(time, this.input);
@@ -575,6 +602,8 @@ export class PixelforgeController {
       if (!nowAttacking) { this.busy = null; this.play(body.velocity.y < 0 ? A.rise : A.fall); }
     } else if (this.airborne) {
       s.emit('pixelforge-land', s);
+      const dust = this.opts.dust ?? 'fx_dust';
+      if (dust && isFx(s.scene, dust)) spawnPixelforgeFx(s.scene, s.x, s.y, dust, undefined, { flipX: s.flipX });
       if (A.land && !nowAttacking) { this.busy = A.land; s.play(A.land); }
     } else if (this.busy && dir && this.busy === A.land) {
       this.busy = null;   // moving cancels the landing pose
@@ -779,10 +808,10 @@ export function pixelforgeLevel(scene, name, opts = {}) {
 // so can you from the browser console:
 //   await pixelforgePlay.ready                          resolves once a level is running
 //   pixelforgePlay.step(500, { right: true, run: true }) holds those keys for 500 ms of game time
-//   pixelforgePlay.state()   { level, x, y, vx, vy, onGround, facing, anim, ...opts.extra(), events }
+//   pixelforgePlay.state()   { level, x, y, vx, vy, onGround, facing, anim, dialogOpen, ...opts.extra(), events }
 //   pixelforgePlay.release()                            the real-time loop and the keyboard again
 // step() first freezes the real-time loop (freeze()), then advances whole 60 fps frames, so a run is
-// the same every time. `events` are the triggers, jumps, lands, attacks, hits and falls since the last
+// the same every time. `events` are the triggers, jumps, lands, attacks, hits, falls and dialogs since the last
 // state(); log({type, ...}) adds your own. opts.extra returns more to report (health, coins...).
 const PLAY_FRAME = 1000 / 60;
 const playFrameDelta = () => PLAY_FRAME;
@@ -836,7 +865,7 @@ export function installPixelforgePlay(scene, level, opts = {}) {
       return play;
     };
     play.state = () => ({ level: play.level?.name ?? null, ...(play.player?.controller?.state() ?? {}),
-                          ...(play.extra?.() ?? {}), events: play.events.splice(0) });
+                          dialogOpen: !!openDialog, ...(play.extra?.() ?? {}), events: play.events.splice(0) });
     w.pixelforgePlay = play;
   }
   play.scene = scene;
@@ -851,8 +880,10 @@ export function installPixelforgePlay(scene, level, opts = {}) {
     p.on('pixelforge-trigger', (o) => play.log({ type: 'trigger', name: o.name, object: o.type, to: o.to ?? null }));
   }
   const fell = () => play.log({ type: 'fell' });
+  const dialog = (d) => play.log({ type: 'dialog', name: d.name ?? null, text: d.pages[0] ?? '' });
   scene.events.on('pixelforge-fell', fell);
-  scene.events.once('shutdown', () => scene.events.off('pixelforge-fell', fell));
+  scene.events.on('pixelforge-dialog', dialog);
+  scene.events.once('shutdown', () => { scene.events.off('pixelforge-fell', fell); scene.events.off('pixelforge-dialog', dialog); });
   play.resolve(play);
   return play;
 }
@@ -874,6 +905,169 @@ export function addPixelforgeSprite(scene, x, y, name) {
   const idle = [`${name}_idle`, `${name}_idle_down`].find((k) => tags.includes(k)) ?? tags[0];
   if (idle) s.play(idle);
   return s;
+}
+
+// ---- game feel ------------------------------------------------------------------------------------
+//   const feel = pixelforgeFeel(this);          // in create; one per scene
+//   enablePixelforgeHits(this, hero, () => enemies, (enemy) => {
+//     feel.hitStop(60); feel.shake(80, 2); feel.flash(enemy); feel.knockback(enemy, hero, 120);
+//   });
+// Each method returns the feel object, so they chain: feel.hitStop(50).shake(100, 1).
+export function pixelforgeFeel(scene) {
+  let stopTimer = null, held = [];
+  const resume = () => {
+    stopTimer = null;
+    scene.pixelforgeStopped = false;
+    scene.physics?.world?.resume();
+    for (const o of held) if (o.active) o.anims.resume();
+    held = [];
+  };
+  scene.events?.once('shutdown', () => { stopTimer?.remove(false); stopTimer = null; held = []; scene.pixelforgeStopped = false; });
+  const feel = {
+    // Shakes the camera for `ms`, up to `px` game pixels each way.
+    shake(ms = 100, px = 2) {
+      const cam = scene.cameras.main;
+      cam.shake(ms, { x: px / cam.width, y: px / cam.height }, true);
+      return feel;
+    },
+    // Freezes the action for `ms` (physics, every playing animation, the player's controller): the
+    // split-second pause that makes a hit land. Timers and tweens keep running. A second call extends it.
+    hitStop(ms = 60) {
+      if (stopTimer) stopTimer.remove(false);
+      else {
+        scene.physics?.world?.pause();
+        held = scene.children.list.filter((o) => o.anims?.isPlaying);
+        for (const o of held) o.anims.pause();
+        scene.pixelforgeStopped = true;
+      }
+      stopTimer = scene.time.delayedCall(ms, resume);
+      return feel;
+    },
+    // Paints the sprite one flat color (white) for `ms`.
+    flash(sprite, ms = 80, color = 0xffffff) {
+      sprite.setTintFill(color);
+      scene.time.delayedCall(ms, () => { if (sprite.active) sprite.clearTint(); });
+      return feel;
+    },
+    // Pushes `target` away from `from` (a sprite or {x, y}) at `speed` px/s. A body under gravity (a
+    // side-view player) is pushed sideways and popped up by `lift` (default: speed); others straight away.
+    // A player's controller lets go for `stun` ms so the push isn't steered out at once.
+    knockback(target, from, speed = 140, { lift, stun = 200 } = {}) {
+      const b = target.body;
+      if (!b) return feel;
+      const gravity = (b.gravity?.y ?? 0) + (scene.physics?.world?.gravity?.y ?? 0);
+      let dx = target.x - (from?.x ?? target.x), dy = target.y - (from?.y ?? target.y);
+      if (b.allowGravity !== false && gravity > 0) {
+        b.setVelocity((Math.sign(dx) || (from?.flipX ? -1 : 1)) * speed, -(lift ?? speed));
+      } else {
+        const len = Math.hypot(dx, dy);
+        if (!len) { dx = from?.flipX ? -1 : 1; dy = 0; } else { dx /= len; dy /= len; }
+        b.setVelocity(dx * speed, dy * speed);
+      }
+      target.controller?.stun(stun);
+      return feel;
+    },
+  };
+  return feel;
+}
+
+// ---- dialog: a nine-slice box with typewriter text ---------------------------------------------------
+//   await pixelforgeDialog(this, { text: ['Welcome to the village!', 'Mind the pond.'], player: hero });
+// The box sits at the bottom of the screen in its own scene (zoom 1, like the HUD). The text types out
+// at `speed` characters a second; the action key (attack or jump: X, J, Space) shows the rest of the
+// page at once, then turns the page, then closes the box. Long text wraps and pages by itself; each
+// string in a `text` array starts a new page. While it's open the calling scene is paused (opts.pause
+// false keeps it running), and the promise resolves when it closes.
+// opts: text, name (shown in the playtest log), panel ('ui:panel'), font ('font'), tint ('#181425', the
+// ink), speed (40; 0 = all at once), lines (3 per page), margin (4), padding (6), position ('bottom' |
+// 'top'), player (read its controller's input, which is what playtests drive; else the keyboard).
+export const PIXELFORGE_DIALOG = 'pixelforge-dialog';
+export const DIALOG_DEFAULTS = { panel: 'ui:panel', font: 'font', tint: '#181425', speed: 40, lines: 3, margin: 4,
+                                 padding: 6, position: 'bottom', pause: true };
+let openDialog = null;
+
+// Wrapped text cut into pages of `lines` lines. `wrap(paragraph)` returns it with line breaks added.
+export function pixelforgePages(text, lines, wrap = (s) => s) {
+  const pages = [];
+  for (const para of [].concat(text ?? '')) {
+    const rows = wrap(String(para)).split('\n');
+    for (let i = 0; i < rows.length; i += lines) pages.push(rows.slice(i, i + lines).join('\n'));
+  }
+  return pages.length ? pages : [''];
+}
+
+export function pixelforgeDialog(scene, opts = {}) {
+  const o = { ...DIALOG_DEFAULTS, ...opts };
+  if (openDialog) openDialog.close(false);   // one at a time: a new one replaces it
+  return new Promise((resolve) => {
+    const data = { o, resolve, owner: scene };
+    if (scene.scene.get(PIXELFORGE_DIALOG)) scene.scene.launch(PIXELFORGE_DIALOG, data);
+    else scene.scene.add(PIXELFORGE_DIALOG, { key: PIXELFORGE_DIALOG,
+      create(d) { this.dialog = buildPixelforgeDialog(this, d); },
+      update(time, delta) { this.dialog?.update(delta); } }, true, data);
+    scene.scene.bringToTop(PIXELFORGE_DIALOG);
+    if (o.pause && scene.scene.key !== PIXELFORGE_DIALOG) scene.scene.pause();
+  });
+}
+
+// The box itself, built into `scene` (pixelforgeDialog gives it its own). Returns {update(ms), close()}.
+export function buildPixelforgeDialog(scene, { o, resolve, owner }) {
+  const W = scene.scale.width, H = scene.scale.height;
+  const [sheet, icon] = splitRef(o.panel);
+  const lineHeight = scene.cache.bitmapFont.get(o.font)?.data?.lineHeight ?? 10;
+  const w = W - 2 * o.margin, h = o.lines * lineHeight + 2 * o.padding;
+  const x = o.margin, y = o.position === 'top' ? o.margin : H - o.margin - h;
+  const box = addPixelforgePanel(scene, x, y, sheet, icon, w, h).setOrigin(0, 0);
+  const label = scene.add.bitmapText(x + o.padding, y + o.padding, o.font, '');
+  if (o.tint) label.setTint(hexColor(o.tint));
+  const wrap = (s) => {   // Phaser's own word wrap, read back as text with line breaks
+    label.setMaxWidth(w - 2 * o.padding).setText(s);
+    const out = label.getTextBounds(false).wrappedText || s;
+    label.setMaxWidth(0).setText('');
+    return out;
+  };
+  const pages = pixelforgePages(o.text, o.lines, wrap);
+  const more = scene.add.graphics().fillStyle(hexColor(o.tint ?? '#181425'), 1)
+    .fillTriangle(0, 0, 5, 0, 2.5, 3).setPosition(x + w - o.padding - 5, y + h - o.padding - 2).setVisible(false);
+  const ctl = o.player?.controller;
+  const keys = ctl ? null : scene.input?.keyboard?.addKeys('SPACE,ENTER,X,J,Z');
+  const input = () => (ctl ? ctl.readInput() : { attack: !!(keys && (keys.X.isDown || keys.J.isDown || keys.Z.isDown || keys.ENTER.isDown)),
+                                                   jump: !!keys?.SPACE.isDown });
+  const d = { pages, page: 0, shown: 0, acc: 0, blink: 0, prev: input(), closed: false, name: o.name };
+  const show = () => label.setText(pages[d.page].slice(0, d.shown));
+  d.close = (done = true) => {
+    if (d.closed) return;
+    d.closed = true;
+    openDialog = null;
+    for (const obj of [box, label, more]) obj.destroy();
+    if (ctl) ctl.prev = ctl.readInput();   // the key that closed it doesn't also swing a sword
+    if (owner.scene.isPaused?.()) owner.scene.resume();
+    owner.events?.emit('pixelforge-dialog-close', d);
+    if (scene !== owner) scene.scene.stop();
+    resolve(done);
+  };
+  d.update = (ms) => {
+    if (d.closed) return;
+    const now = input();
+    const press = (now.attack && !d.prev.attack) || (now.jump && !d.prev.jump);
+    d.prev = now;
+    const text = pages[d.page];
+    if (press) {
+      if (d.shown < text.length) d.shown = text.length;
+      else if (d.page < pages.length - 1) { d.page += 1; d.shown = 0; d.acc = 0; }
+      else return d.close();
+    } else if (d.shown < text.length) {
+      d.acc += ms;
+      d.shown = o.speed > 0 ? Math.min(text.length, Math.floor(d.acc * o.speed / 1000)) : text.length;
+    }
+    show();
+    d.blink = (d.blink + ms) % 800;
+    more.setVisible(d.shown >= pages[d.page].length && d.page < pages.length - 1 && d.blink < 500);
+  };
+  openDialog = d;
+  owner.events?.emit('pixelforge-dialog', d);
+  d.update(0);
+  return d;
 }
 
 // Debug overlay: call every frame with a Graphics object, e.g. in update():

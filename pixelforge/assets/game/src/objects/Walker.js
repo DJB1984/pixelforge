@@ -47,9 +47,7 @@ export class Walker {
     const s = this.sprite;
     this.hp -= 1;
     this.recoverAt = this.scene.time.now + 250;
-    s.body.setVelocity(Math.sign(s.x - from.x || 1) * 120, 0);
-    s.setTintFill(0xffffff);
-    this.scene.time.delayedCall(80, () => s.active && s.clearTint());
+    this.scene.feel.flash(s).knockback(s, from, 120);   // the level scene's pixelforgeFeel
     if (this.hp <= 0) {
       s.body.enable = false;
       this.scene.tweens.add({ targets: s, alpha: 0, duration: 200, onComplete: () => s.destroy() });

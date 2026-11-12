@@ -68,7 +68,7 @@ def _xywh(r: Rect, pad: int) -> list[int]:
 
 def frame_boxes(sprite: Sprite, entry, active: bool) -> dict[str, list[list[int]]]:
     _, roles = sprite.resolve_roles(entry)
-    hurt_pts = _points(roles, ROLES["hurt"])
+    hurt_pts = _points(roles, ROLES["hurt"]) if sprite.kind != "fx" else []   # nothing hits an effect
     hit_pts = _points(roles, ROLES["hit"]) if active else []
     return {
         "hurt": [_xywh(_bbox(hurt_pts), sprite.hurt_pad)] if hurt_pts else [],

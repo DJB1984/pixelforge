@@ -7,8 +7,14 @@
   ],
   "props": [
     "chest",
+    "chest_iron",
     "cloud",
-    "house"
+    "house",
+    "sign"
+  ],
+  "fx": [
+    "fx_dust",
+    "fx_hit"
   ],
   "tilesets": [
     "house_tiles",

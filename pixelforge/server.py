@@ -26,9 +26,10 @@ from pathlib import Path
 
 from . import __version__
 from . import critiques as cq
-from .export import INDEX_GROUPS, build_atlas, build_font, build_slices, preview_build, prop_info
+from .export import INDEX_GROUPS, KIND_GROUP, build_atlas, build_font, build_slices, preview_build, prop_info
 from .level import Level, level_data, levels_dir, list_levels
-from .model import ASSETS, Sprite, SpriteError, describe_entry, list_sprites, project_config, root, sprites_dir, to_hex
+from .model import (ASSETS, Sprite, SpriteError, describe_entry, list_sprites, project_config, root, sprite_folder,
+                    sprites_dir, to_hex)
 
 
 # ---- live builds --------------------------------------------------------------------------
@@ -49,7 +50,7 @@ def _shared_files() -> list[Path]:
 
 
 def asset_sig(name: str) -> str:
-    d = sprites_dir() / name
+    d = sprite_folder(name)   # a variant changes with its base's files
     return _files_sig([*_shared_files(), d / "sprite.json", *sorted(d.glob("**/*.txt"))])   # frames, parts, glyphs
 
 
@@ -177,7 +178,7 @@ def live_index() -> dict:
             kind = BUILDS.get(n)[3].kind
         except Exception:
             continue
-        found[{"prop": "props", "tileset": "tilesets", "icons": "icons", "font": "fonts"}.get(kind, "sprites")].append(n)
+        found[KIND_GROUP.get(kind, "sprites")].append(n)
     found["tilesets"] = sorted(found["tilesets"] + [f"{p}_tiles" for p in sliced_props()])
     found["levels"] = list_levels()
     if project_config().get("hud"):
@@ -191,7 +192,8 @@ def _asset(name: str) -> dict:
     except Exception as e:   # a half-edited sprite shouldn't take the whole dashboard down
         return {"name": name, "type": "error", "error": str(e)}
     base = {"name": name, "rev": sig, "sheet": f"/live/{name}.png?v={sig}", "w": s.width, "h": s.height,
-            "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()]}
+            "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()],
+            **({"variantOf": s.base} if s.base else {}), **({"variants": s.variants} if s.variants else {})}
     if s.tiled:   # tileset, icons, font: a grid of named cells
         pf = data["pixelforge"]
         return {**base, "type": s.kind, "cols": data["columns"], "spacing": data["spacing"],
@@ -214,6 +216,8 @@ def _asset(name: str) -> dict:
            "body": list(s.body_rect()), "anims": anims, "view": s.view}
     if s.kind == "prop":
         out["prop"] = {**prop_info(s), "slice": list(s.slice) if s.slice else None}
+    if s.kind == "fx":
+        out["fx"] = {"layer": s.layer}
     return out
 
 

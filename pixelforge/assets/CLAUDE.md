@@ -103,9 +103,42 @@ A prop is anything that isn't a character, a tile or UI: chests, trees, signs, c
 - States that only differ in a detail share layers: the open door is the same entry with `door_open` placed instead of `door`, and lit windows are a `replace` on the window part.
 - References: `sprites/house` (top-down building with parts, sliced), `sprites/chest` (states built from parts), `sprites/cloud` (parallax accent).
 
+## Effects (sparks, dust, explosions)
+An effect is a short animation the game spawns at a spot and forgets: a hit spark, a landing puff, a pop when an
+item is collected. Give it `"type": "fx"` (scaffold: `new spark --fx`, 16×16 by default).
+- Its animations play **once** (`loop` defaults to false), it has no hurtboxes, and it's drawn over everything
+  (`"layer": "front"`; `"world"` sorts it by y among the characters).
+- Put the origin where the effect happens: the centre for a spark, the bottom-centre for dust at the feet.
+- Keep effects fast and bright: 3–5 frames of 40–80ms that burst out and fade (lighter colors first, then darker
+  ones as it dies away, often by `replace` on the last frame). They don't need a black outline. `check` expects
+  big changes between an effect's frames.
+- In the game, `spawnPixelforgeFx(this, x, y, 'fx_hit')` plays it and removes it when it ends (see Phaser usage).
+  The side-view player lands in a puff of **`fx_dust`** whenever the game has an effect by that name, and the
+  starter's attacks spark with **`fx_hit`**.
+- Levels don't place effects; the game spawns them.
+- References: `sprites/fx_hit` (spark), `sprites/fx_dust` (landing puff).
+
+## Variants (same art, other colors)
+A blue slime, a red knight, an iron chest: a variant is another sprite made from the same frames with some
+palette keys mapped to other colors. Declare them in the base sprite's sprite.json:
+```json
+"variants": {"slime_blue": {"palette": {"g": "blue", "G": "navy"}},
+             "slime_red":  {"palette": {"g": "red", "G": "crimson"}}}
+```
+- A variant only recolors keys the base already has. It has no files of its own: draw and fix the base, and every
+  variant follows. `paint`, `dup` and `resize` refuse a variant's name and point at the base.
+- It's a sprite in its own right everywhere else: `list`, `check`, `render`, `export` (its own sheet, with its own
+  animation keys: `slime_blue_idle`), the gallery and the dashboard (listed under the base), and levels
+  (`{"sprite": "slime_blue", "type": "enemy"}`).
+- Shift the whole ramp, not one shade, so the variant keeps the base's light and shadow. Render it and look, as for
+  any sprite: some palettes need a darker outline or a lighter highlight to read.
+- Reference: `chest_iron`, a variant in `sprites/chest/sprite.json`.
+
 ## UI: icons, panels and fonts
 - **Icons** (`new items --icons`): `"type": "icons"`, a fixed cell `size` (16×16 is typical) and `"icons": [...]`, listed like tiles: a frame id, or an entry with a `"name"` (e.g. `{"name": "heart_empty", "from": "heart", "replace": {"r": "B"}}`). They're exported as an atlas, and the game shows one by name. Icons don't animate (make an animated pickup a prop).
 - **Panels and buttons**: an icon with `"nine": [left, right, top, bottom]` border widths is a nine-slice. The corners stay crisp and the edges and middle stretch to any size. `tiles S` shows each one stretched to three sizes: check that the border still reads.
+- **Dialog boxes** are the `panel` icon and the font together: `pixelforgeDialog` (see Phaser: game feel and
+  dialogs). Draw the panel with a light inside so dark text reads on it, or pass a `tint` for light ink.
 - **Fonts** (`new hud --font` starts from a 5×7 font with A–Z, 0–9 and punctuation): `"type": "font"`, with `"size": [max glyph width, height]`, `"spacing"` (px between letters), `"space"` (width of a space) and `"line_height"`. The glyphs live in `glyphs.txt` as blocks: a `= A` line, then the glyph's rows, all the same length (that length is its width). Without lowercase glyphs, lowercase letters reuse the capitals. `tiles myfont "GAME OVER"` previews any text. Draw the ink white so the game can `setTint()` it.
 
 ## Tilesets (terrain, floors, walls)
@@ -227,8 +260,11 @@ pixelforge play meadow --script "right+run 1.8s; right+run+jump; right+run 600ms
     - `expect onGround`, `expect not onGround`;
     - `expect x > 360` (also `y vx vy facing anim level`, and fields the game adds, like `health`);
     - `expect anim == princess_run`, `expect inventory has key`;
-    - `expect trigger door` (an event so far: `trigger hit jump land attack fell`, matched by the object's
-      name, type or `to`), `expect no fell`.
+    - `expect trigger door` (an event so far: `trigger hit jump land attack fell dialog`, matched by the
+      object's name, type or `to`), `expect no fell`, `expect dialog welcome_sign`.
+    - `expect dialogOpen` while a dialog box is up. The level waits while it's open, so press `attack` to turn
+      the pages and close it (one press shows the rest of a page, the next turns it). Signs open dialogs in the
+      starter game, not on the dashboard's play page: test them with `--url`.
 - Runs are the same every time: the game is frozen and stepped one 60 fps frame at a time. So when a jump falls
   short, change the script (jump earlier, hold run) or the level (narrow the gap), and the next run shows exactly
   what changed.
@@ -241,7 +277,7 @@ pixelforge play meadow --script "right+run 1.8s; right+run+jump; right+run 600ms
   - `log.json`: every 100 ms of state, the events, the expects and the notes.
 - It prints notes:
   - stuck (movement held 1s+ without moving 2px), fell out of the world, never landed, left the level;
-  - health lost (when the game reports `health`), triggers fired, hits;
+  - health lost (when the game reports `health`), triggers fired, hits, dialogs opened;
   - every expect, passed or FAILED.
   The exit code is 1 when an expect fails or the page threw an error.
 - `--shot-every 500ms` thins the shots (default 250ms; `0` keeps only the `shot` lines). `--headed` shows the
@@ -268,11 +304,11 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 ## Commands
 | | |
 |---|---|
-| `list` | sprites + animations, and levels |
+| `list` | sprites + animations (props, effects and variants marked), and levels |
 | `new-level NAME [--size WxH] [--tileset T] [--player P]` | scaffold `levels/NAME.json`: one screen of ground and a spawn, played as the first character drawn for the view |
 | `level NAME [--screens \| --at X,Y]` | the whole level as the game draws it (screen grid, labels), or every screen the player sees with the HUD, or one screen centred on a tile → `previews/` |
 | `play NAME --script "right+run 2s; right+jump; expect onGround" [--url URL] [--shot-every 250ms]` | playtest a level in headless Chromium: held keys, screenshots, a contact sheet with the route, notes (stuck, fell, never landed, triggers), and `expect` checks (exit 1 on failure) → `previews/play_NAME.png` |
-| `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
+| `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--fx`, `--tileset`, `--icons`, `--font` for the other kinds |
 | `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
 | `resize S WxH` / `resize S --class C` | re-canvas every frame, keeping the character on its origin |
 | `show S ANIM I` / `show S @frame` / `show S @part` / `show S TILE` | print a frame, part or tile with x/y rulers (find exact coordinates) |
@@ -387,6 +423,9 @@ create()  {
   this.add.bitmapText(70, 152, 'font', 'Press START').setTint(0x181425).setScrollFactor(0);
 }
 ```
+- Effects: `spawnPixelforgeFx(this, x, y, 'fx_hit')` plays the effect's first animation once at (x, y) (its origin)
+  and destroys it. Name another with `spawnPixelforgeFx(this, x, y, 'fx_boom', 'big')`; options `{flipX, rotation, depth}`.
+  `loadPixelforgeAll` loads every effect.
 - A sliced building is also a tileset: `loadPixelforgeTiles(this, 'house_tiles')`, then `stampPixelforgeTiles(layer, 'house_tiles', 'house', tx, ty, { above })`, or paint it in Tiled.
 - `/viewer/tilemap.html?prop=house` (a top-down prop's "In game" tab) stands the prop on a tileset's sample map, so you can walk around it, into its footprint and behind its roof.
 - For top-down characters, collide with the feet only: `hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8)` with `b = pixelforgeBody(...)`, so the head can overlap the top of a wall. `addPixelforgePlayer` does this for you.
@@ -406,7 +445,8 @@ hero.on('pixelforge-land', () => this.cameras.main.shake(60, 0.002));   // also 
 - The view comes from the sprite's export (the `topdown` and `overhead` classes imply theirs), or pass `{view}`.
   - **side:** walk, run (Shift), jump with coyote time, a jump buffer and variable height (release early for a hop).
     Animations: `idle`, `walk`, `run`, `jump_rise`, `jump_fall`, `jump_land` and `attack`. A missing one falls back to a
-    simpler one (`run` → `walk` → `idle`). Options: `speed` 70, `run` 135, `jump` 330, `gravity` 900 (the player's
+    simpler one (`run` → `walk` → `idle`). It lands in a puff of the `fx_dust` effect when the game has one
+    (option `dust`: another effect's name, or `false`). Options: `speed` 70, `run` 135, `jump` 330, `gravity` 900 (the player's
     total, whatever the world's), `coyote` 90 and `buffer` 120 (ms).
   - **topdown:** 4 directions with `playFacing`, a feet-only body, `attack_<down|up|side>`, and depth = y. Option `speed`.
   - **overhead:** 8 directions, rotated to face where it walks, a circle body from the body box, and `attack`.
@@ -421,6 +461,31 @@ hero.on('pixelforge-land', () => this.cameras.main.shake(60, 0.002));   // also 
   `pixelforgePlay.step(500, {right: true})` holds keys for 500 ms of game time and returns the state,
   `state()` gives `{level, x, y, vx, vy, onGround, facing, anim, ..., events}` (triggers, jumps, lands, attacks, hits
   and falls since the last call), and `release()` goes back to real time and the keyboard. Tweens step with it.
+
+## Phaser: game feel and dialogs
+```js
+import { pixelforgeFeel, pixelforgeDialog, spawnPixelforgeFx } from './export/pixelforge.js';
+const feel = pixelforgeFeel(this);                         // in create; one per scene
+enablePixelforgeHits(this, hero, () => enemies, (enemy) => {
+  feel.hitStop(50).shake(80, 1).flash(enemy).knockback(enemy, hero, 120);
+  spawnPixelforgeFx(this, enemy.x, enemy.body.center.y, 'fx_hit');
+});
+await pixelforgeDialog(this, { text: ['Welcome to the village!', 'Mind the pond.'], player: hero });
+```
+- `shake(ms, px)`: the camera shakes up to `px` game pixels. Keep it small (1–2px) and short (60–150ms) for hits;
+  save big shakes for explosions and bosses.
+- `hitStop(ms)`: physics, every playing animation and the player's controller freeze for `ms` (40–80ms), the
+  split-second pause that makes a hit feel solid. A second call extends it.
+- `flash(sprite, ms = 80, color = white)`: one flat color, then back.
+- `knockback(target, from, speed, {lift, stun})`: a side-view player (under gravity) goes sideways and up by `lift`;
+  anything else straight away from `from`. A player's controller lets go for `stun` ms (default 200).
+- Every method returns `feel`, so they chain.
+- `pixelforgeDialog(scene, opts)` opens a nine-slice box (`panel: 'ui:panel'`) at the bottom of the screen, in its own
+  scene like the HUD, and types the text out in the font (`font: 'font'`, `tint` = the ink, `speed` characters a
+  second). The action key (X/J/Space, or the player's attack and jump) shows the rest of the page, then turns it,
+  then closes the box. It wraps words, makes pages of `lines` (3) lines, and each string in a `text` array starts a
+  new page. The scene that opened it is paused until it closes. It returns a promise.
+- Pass `player` so the dialog reads the player's controller input, which is what playtests drive.
 
 ## Building the game
 `pixelforge game` (in this folder) scaffolds a Phaser + Vite game around the art. Then `npm install && npm run dev`
@@ -443,6 +508,11 @@ src/objects/Walker.js  the example enemy: patrols, turns at walls and ledges, hu
   "props": {"hp": 3}}`), write a class in `src/objects/` taking `(scene, sprite, level)` with `update(time)` (and
   `hit(from)` if the player's attack can hurt it), and add it to `TYPES` in `Level.js`. The sprite's `pixelforgeObject`
   holds the level object, including its `props`. Copy `Walker.js` to start.
+- **Hits** use `this.feel` (`pixelforgeFeel`): a hit stop, a small shake, the enemy flashes and is knocked back, and
+  `fx_hit` sparks at the contact if the art has it. Getting hurt knocks the player back and shakes harder.
+- **Signs and NPCs:** any prop, sprite or trigger zone with `props.text` (a string, or a list of pages) opens a dialog
+  box when the player touches it, once per visit (step away and back to read it again):
+  `"S": {"prop": "sign", "props": {"text": ["Welcome!", "The inn is east."]}}`.
 - **Items:** objects with `"type": "item"` or `"coin"` are picked up on touch. `props.loot` names what you get:
   `"coin"` adds a coin, anything else goes into `state.inventory`. `"type": "chest"` props open on touch (they play
   their `opening` or `open` state) and give their `props.loot`. Read the inventory with `hasItem('key')` from

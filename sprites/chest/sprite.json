@@ -14,6 +14,9 @@
     "a": "amber",
     "y": "yellow"
   },
+  "variants": {
+    "chest_iron": {"palette": {"t": "light_gray", "b": "gray", "B": "slate", "e": "dark_slate"}}
+  },
   "animations": {
     "closed": {"frames": [{"layers": [{"part": "body", "at": [0, 8]}, {"part": "lid_closed", "at": [0, 4]}]}]},
     "opening": {"loop": false, "frames": [
