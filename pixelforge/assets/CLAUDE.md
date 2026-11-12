@@ -214,7 +214,7 @@ create()  {
 update()  { debug.clear(); drawPixelforgeBoxes(debug, [knight, ...enemies]); }       // optional overlay
 ```
 - Load everything at once with `loadPixelforgeAll(this)` in preload (it reads `export/index.json` and queues every
-  sprite, prop, tileset, icon atlas, font, level and sound) and `createPixelforgeAll(this)` in create (every animation).
+  sprite, prop, tileset, icon atlas, font and level) and `createPixelforgeAll(this)` in create (every animation).
 - `createPixelforgeAnims` wraps `this.anims.createFromAseprite` and restores `loop` (Phaser otherwise plays every tag once).
 - Face left with `sprite.setFlipX(true)`. Boxes mirror with it.
 - Top-down: `playFacing(sprite, 'walk', 'left' | 'right' | 'up' | 'down')` picks `<sprite>_walk_<down|up|side>` and sets the flip.

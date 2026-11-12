@@ -129,12 +129,12 @@ import { loadPixelforgeAll, createPixelforgeAll, addPixelforgePlayer, pixelforge
   handlers.filecomplete('other', 'json', {});
   check('other files are ignored', queued, []);
   handlers.filecomplete('pixelforge-index', 'json', { sprites: ['hero', 'already'], props: ['chest'], tilesets: ['terrain'],
-    icons: ['ui'], fonts: ['font'], levels: ['village'], sounds: ['coin'] });
+    icons: ['ui'], fonts: ['font'], levels: ['village'] });
   check('then every asset by kind', queued, [
     ['aseprite', 'hero', 'x/hero.png', 'x/hero.json'], ['aseprite', 'chest', 'x/chest.png', 'x/chest.json'],
     ['image', 'terrain', 'x/terrain.png'], ['json', 'terrain', 'x/terrain.json'],
     ['aseprite', 'ui', 'x/ui.png', 'x/ui.json'], ['font', 'font', 'x/font.png', 'x/font.xml'],
-    ['level', 'village', 'x/levels/village.json'], ['audio', 'coin', 'x/sounds/coin.wav']]);
+    ['level', 'village', 'x/levels/village.json']]);
   check('the handler removes itself', 'filecomplete' in handlers, false);
 
   const created = [];

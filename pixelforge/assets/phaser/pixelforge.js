@@ -367,18 +367,12 @@ export function queuePixelforgeIndex(scene, index, baseUrl = 'export/') {
   each('icons', loadPixelforgeIcons, tex);
   each('fonts', loadPixelforgeFont, tex);
   each('levels', loadPixelforgeLevel, (n) => scene.cache.tilemap?.exists(n));
-  each('sounds', loadPixelforgeSound, (n) => scene.cache.audio?.exists(n));
   return queued;
 }
 
 // A level (export/levels/<name>.json, a Tiled map with its tilesets embedded). pixelforgeLevel builds it.
 export function loadPixelforgeLevel(scene, name, baseUrl = 'export/') {
   scene.load.tilemapTiledJSON(name, `${baseUrl}levels/${name}.json`);
-}
-
-// A sound effect (export/sounds/<name>.wav): scene.sound.play(name).
-export function loadPixelforgeSound(scene, name, baseUrl = 'export/') {
-  scene.load.audio(name, `${baseUrl}sounds/${name}.wav`);
 }
 
 // Animations for every sprite and prop in the loaded index. Returns their names.

@@ -1,4 +1,4 @@
-# Plan: whole levels, a game starter, screen previews, playtesting, sound
+# Plan: whole levels, a game starter, screen previews, playtesting
 
 Written 2026-11-11 against pixelforge 0.8.0 (`origin/main` 8f3fadf). The goal is for pixelforge + Phaser to let
 Claude build a whole game: **write a level as text, see whole screens, play it, fix it**. Today Claude can make
@@ -57,7 +57,7 @@ dashboard, the playtest and the real game behave identically.
 
 - [x] **`loadPixelforgeAll(scene, baseUrl = 'export/')`**: queues `index.json`, then, in its `filecomplete`
   handler, every asset by kind. `sprites`/`props` use `loadPixelforge`, `tilesets` use `loadPixelforgeTiles`,
-  `icons` `loadPixelforgeIcons`, `fonts` `loadPixelforgeFont`, and later `levels` and `sounds`. Adding files during
+  `icons` `loadPixelforgeIcons`, `fonts` `loadPixelforgeFont`, and later `levels`. Adding files during
   a load is supported in Phaser 3. Also add **`createPixelforgeAll(scene)`**, which creates the anims for every
   sprite and prop in the cached index.
 - [x] **`addPixelforgePlayer(scene, x, y, name, opts)`** returns the sprite with `.controller`. It reads
@@ -279,24 +279,7 @@ showing the princess crossing the gap, with a passing `expect`.
 
 ---
 
-## Phase 6: Sound effects (and maybe music)
-- [ ] `sounds/<name>.json` with sfxr-style parameters: `wave` (square/saw/sine/triangle/noise), `freq` [start, end]
-  Hz, `slide`, `duration`, `attack`/`sustain`/`decay`, `vibrato` [depth, speed], `arp` [step, ms], `duty`,
-  `volume`. Presets: `jump coin hit explosion laser powerup blip step`.
-  - `new NAME --sound --preset coin` writes the preset's parameters for editing.
-- [ ] `sound.py`: a pure-Python synth (`array` + `wave`, 22050 Hz, 16-bit mono). No numpy.
-  - Export `export/sounds/<name>.wav`, and add `sounds` to the index; `loadPixelforgeAll` loads them.
-  - Usage: `scene.sound.play('coin')`.
-- [ ] `sound NAME`: Claude can't hear, so it prints duration, pitch at start/end, peak/RMS loudness, and
-  clipping, and writes `previews/sound_<name>.png` (a waveform plus a pitch-over-time line).
-- [ ] Dashboard: a **Sounds** section with play buttons (`/live/sounds/<name>.wav`), and critiques on a whole sound.
-- [ ] Stretch (only if time allows and the user wants it): `music/<name>.json` with tempo, a note pattern per
-  channel (square/triangle/noise) as text rows, rendered to a looping wav.
-- [ ] Tests: synth determinism (same params → same bytes), duration, presets valid, wav header.
-
----
-
-## Phase 7: Smaller gaps
+## Phase 6: Smaller gaps
 - [ ] **Effects:** `"type": "fx"`: like a prop, but animations are one-shot, there are no hurtboxes, and the
   layer defaults to `front`. Add `spawnPixelforgeFx(scene, x, y, name, anim?)`, which plays the effect and then
   destroys it. Demo `sprites/fx_hit` (spark, 4 frames) and `fx_dust` (landing puff); the side-view controller spawns
@@ -316,4 +299,4 @@ showing the princess crossing the gap, with a passing `expect`.
 
 ## Release suggestion
 Phases 1–3 make 0.9.0 (the big one: levels you can see and play), Phase 4 is 0.10.0, Phase 5 0.11.0, and
-Phases 6–7 0.12.0. Ask the user before each merge/tag.
+Phase 6 0.12.0. Ask the user before each merge/tag. Sound effects are out of scope (the user's call, 2026-11-11).
