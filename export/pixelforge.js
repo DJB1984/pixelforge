@@ -164,6 +164,8 @@ export function applyPixelforgeTileProperties(layer, name) {
   });
   const collide = pf.properties.flatMap((p, i) => (p.collides ? [i + ts.firstgid] : []));
   if (collide.length) layer.setCollision(collide);
+  // "oneway": true (with "collides"): a plank you jump up through and land on
+  layer.forEachTile((tile) => { if (tile.properties?.oneway && tile.collides) tile.setCollision?.(false, false, true, false); });
   return collide;
 }
 
@@ -365,18 +367,12 @@ export function queuePixelforgeIndex(scene, index, baseUrl = 'export/') {
   each('icons', loadPixelforgeIcons, tex);
   each('fonts', loadPixelforgeFont, tex);
   each('levels', loadPixelforgeLevel, (n) => scene.cache.tilemap?.exists(n));
-  each('sounds', loadPixelforgeSound, (n) => scene.cache.audio?.exists(n));
   return queued;
 }
 
 // A level (export/levels/<name>.json, a Tiled map with its tilesets embedded). pixelforgeLevel builds it.
 export function loadPixelforgeLevel(scene, name, baseUrl = 'export/') {
   scene.load.tilemapTiledJSON(name, `${baseUrl}levels/${name}.json`);
-}
-
-// A sound effect (export/sounds/<name>.wav): scene.sound.play(name).
-export function loadPixelforgeSound(scene, name, baseUrl = 'export/') {
-  scene.load.audio(name, `${baseUrl}sounds/${name}.wav`);
 }
 
 // Animations for every sprite and prop in the loaded index. Returns their names.
@@ -601,6 +597,126 @@ export function addPixelforgePlayer(scene, x, y, name, opts = {}) {
   const start = controller.anim.idle ?? (view === 'topdown' ? `${name}_idle_down` : undefined);
   if (view === 'topdown') playFacing(sprite, 'idle', 'down'); else if (start) sprite.play(start);
   return sprite;
+}
+
+// ---- levels (levels/<name>.json, exported as Tiled maps with the tilesets embedded) -------------
+//   preload() { loadPixelforgeAll(this); }                    // or loadPixelforgeLevel + each asset it uses
+//   create()  {
+//     const level = pixelforgeLevel(this, 'village');           // map, player, props, camera: all set up
+//     this.events.on('pixelforge-trigger', (obj) => { if (obj.type === 'door') this.scene.restart({ level: obj.to }); });
+//   }
+
+const hexColor = (s) => parseInt(String(s).replace('#', '').slice(0, 6), 16);
+
+// The level's own description (view, background, accents, player, camera, layers, objects), as exported.
+export function pixelforgeLevelInfo(scene, name) {
+  const pf = scene.cache.tilemap.get(name)?.data?.pixelforge;
+  if (!pf) throw new Error(`pixelforge: level '${name}' isn't loaded (loadPixelforgeLevel(this, '${name}') in preload)`);
+  return pf;
+}
+
+// Builds a whole level: background color (or {"gradient": [top, bottom]}) and accent props; tile layers
+// with properties, collision and animation (`above` layers over the characters); props and sprites at
+// their spots; the player at the spawn (opts.spawn names one; default "player") through
+// addPixelforgePlayer (opts.player overrides the level's, opts.playerOptions go to the controller),
+// colliding with the layers and solid props; camera bounds, follow and zoom. Door and trigger zones emit
+// 'pixelforge-trigger' (object, player) on the scene's events when the player walks in. A side-view
+// player who falls out of the level emits 'pixelforge-fell' and goes back to the spawn
+// (opts.respawn: false to handle it yourself).
+// Returns { map, layers, player, objects, props, sprites, spawns, triggers, accents, info }.
+export function pixelforgeLevel(scene, name, opts = {}) {
+  const info = pixelforgeLevelInfo(scene, name);
+  const [W, H] = info.size;
+  const map = scene.make.tilemap({ key: name });
+  const tilesets = info.tilesets.map((t) => addPixelforgeTileset(map, t));
+  const cam = scene.cameras.main;
+  const bg = info.background ?? {};
+  if (bg.color) cam.setBackgroundColor(bg.color);
+  if (bg.gradient) {
+    const [top, bottom] = bg.gradient.map(hexColor);
+    scene.add.graphics().setScrollFactor(0, 1).setDepth(-20000)
+      .fillGradientStyle(top, top, bottom, bottom, 1).fillRect(-10000, 0, 20000 + W, H);
+  }
+  const accents = (info.accents ?? []).map((a) => addPixelforgeProp(scene, a.at[0], a.at[1], a.prop,
+                                                                    { state: a.state, physics: false }));
+  const layers = {};
+  info.layers.forEach((l, i) => {
+    const layer = map.createLayer(l.name, tilesets, 0, 0);
+    for (const t of info.tilesets) applyPixelforgeTileProperties(layer, t);
+    for (const t of info.tilesets) animatePixelforgeTiles(layer, t);
+    layer.setDepth(l.above ? 1e5 : -5000 + i);
+    layers[l.name] = layer;
+  });
+
+  const objects = info.objects ?? [];
+  const props = [], sprites = [], triggers = [], spawns = {};
+  for (const o of objects) {
+    if (o.type === 'spawn') spawns[o.name] = o;
+    if (o.rect) triggers.push(o);
+    if (o.prop) {
+      const s = addPixelforgeProp(scene, o.x, o.y, o.prop, { state: o.state });
+      s.pixelforgeObject = o;
+      props.push(s);
+    } else if (o.sprite) {
+      const s = addPixelforgeSprite(scene, o.x, o.y, o.sprite);
+      s.pixelforgeObject = o;
+      sprites.push(s);
+    }
+  }
+
+  const arcade = scene.physics?.world;
+  if (arcade) arcade.setBounds(0, 0, W, H, true, true, true, info.view !== 'side');   // side: you can fall out
+  cam.setBounds(0, 0, W, H).setZoom(info.camera?.zoom ?? 1);
+  let player = null;
+  const playerName = opts.player ?? info.player;
+  if (playerName && arcade) {
+    const spawn = spawns[opts.spawn] ?? spawns.player ?? Object.values(spawns)[0] ?? { x: 0, y: 0 };
+    player = addPixelforgePlayer(scene, spawn.x, spawn.y, playerName, { view: info.view, ...opts.playerOptions });
+    for (const layer of Object.values(layers)) scene.physics.add.collider(player, layer);
+    for (const p of props) if (p.body) scene.physics.add.collider(player, p);
+    cam.startFollow(player, true);
+    const inside = new Set();
+    const tick = () => {
+      if (!player.active) return;
+      const b = player.body;
+      for (const o of triggers) {
+        const [x, y, w, h] = o.rect;
+        const hit = b.x < x + w && x < b.x + b.width && b.y < y + h && y < b.y + b.height;
+        if (hit && !inside.has(o)) {
+          inside.add(o);
+          scene.events.emit('pixelforge-trigger', o, player);
+          player.emit('pixelforge-trigger', o);
+        } else if (!hit) inside.delete(o);
+      }
+      if (info.view === 'side' && player.y > H + 64 && opts.respawn !== false) {
+        scene.events.emit('pixelforge-fell', player);
+        player.body.reset(spawn.x, spawn.y);   // moves the sprite too, and stops it
+      }
+    };
+    scene.events.on('update', tick);
+    scene.events.once('shutdown', () => scene.events.off('update', tick));
+  }
+  if (info.view !== 'side') keepPixelforgeDepth(scene, sprites);
+  return { map, layers, player, objects, props, sprites, spawns, triggers, accents, info };
+}
+
+// A character standing in a level (an NPC or an enemy): an immovable Arcade sprite (a plain one without
+// physics) with its body box, playing idle. Game code gives it behaviour.
+export function addPixelforgeSprite(scene, x, y, name) {
+  const pf = scene.cache.json.get(name)?.meta?.pixelforge;
+  if (!pf) throw new Error(`pixelforge: '${name}' isn't loaded (loadPixelforge(this, '${name}') in preload)`);
+  if (!Object.keys(pf.animations).every((k) => scene.anims.exists(k))) createPixelforgeAnims(scene, name);
+  const s = scene.physics?.add ? scene.physics.add.sprite(x, y, name) : scene.add.sprite(x, y, name);
+  if (s.body) {
+    const b = pixelforgeBody(scene, name);
+    s.body.setSize(b.width, b.height).setOffset(b.x, b.y);
+    s.body.setAllowGravity(false);
+    s.body.setImmovable(true);
+  }
+  const tags = Object.keys(pf.animations);
+  const idle = [`${name}_idle`, `${name}_idle_down`].find((k) => tags.includes(k)) ?? tags[0];
+  if (idle) s.play(idle);
+  return s;
 }
 
 // Debug overlay: call every frame with a Graphics object, e.g. in update():

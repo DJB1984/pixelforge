@@ -130,37 +130,37 @@ New module `pixelforge/level.py`, with `levels/<name>.json` at the project root 
 - `view` and `camera.zoom` default from `pixelforge.json`; `resolution` comes from `pixelforge.json`.
 
 ### Autotiling (small gap: autotiling)
-- [ ] Add a tileset key `"autotile": {"water": {"base": "water", "edges": {"n": "water_n", "s": "water_s",
+- [x] Add a tileset key `"autotile": {"water": {"base": "water", "edges": {"n": "water_n", "s": "water_s",
   "e": "...", "w": "...", "ne": "...", ...}}}`.
-- [ ] When building a level, each `auto:water` cell takes a 4-bit mask of which N/S/E/W neighbours aren't water,
+- [x] When building a level, each `auto:water` cell takes a 4-bit mask of which N/S/E/W neighbours aren't water,
   then picks the most specific edge tile that exists (`ne` > `n` > base).
-- [ ] Bake the result into the exported map, so the game doesn't need to know about autotiling. Tiled wangset export
+- [x] Bake the result into the exported map, so the game doesn't need to know about autotiling. Tiled wangset export
   is out of scope (note it as later).
 
 ### Python
-- [ ] `level.py`: `Level.load(name)` (validates the shape, resolves the legend, stamps and autotiles into per-layer
+- [x] `level.py`: `Level.load(name)` (validates the shape, resolves the legend, stamps and autotiles into per-layer
   index grids, and resolves objects to pixel positions); `list_levels()`.
-- [ ] `check` lints levels too, with errors for:
+- [x] `check` lints levels too, with errors for:
   - unknown chars, missing tilesets/tiles/props/sprites/stamps, ragged rows, layers of different sizes;
   - a level with no `spawn`, or a spawn on a colliding tile or inside a solid footprint;
   - a door `to` a missing level.
-- [ ] `check` also warns when objects' solid footprints overlap each other, and for **reachability** (top-down and
+- [x] `check` also warns when objects' solid footprints overlap each other, and for **reachability** (top-down and
   overhead): flood-fill from the spawn over cells that aren't colliding and aren't covered by solid footprints,
   then list unreachable doors, items and chests. Side view: just an info line (platform reachability is out of
   scope).
-- [ ] Export `export/levels/<name>.json` as a Tiled map (orthogonal JSON):
+- [x] Export `export/levels/<name>.json` as a Tiled map (orthogonal JSON):
   - tile layers as gids, with the tilesets **embedded** (Phaser can't read external ones);
   - one `objectgroup` "objects" (each object with name, class=type, x, y, w, h, and properties `prop`/`sprite`/
     `state` plus custom `props`);
   - map properties carrying `background`, `accents`, `player`, `camera`, `view`.
-- [ ] Add `levels` to `export/index.json`, and make `export --all` / `upgrade` include levels.
-- [ ] CLI: `new-level NAME [--size 40x23] [--tileset terrain]` scaffolds one screen of ground plus a spawn, and
+- [x] Add `levels` to `export/index.json`, and make `export --all` / `upgrade` include levels.
+- [x] CLI: `new-level NAME [--size 40x23] [--tileset terrain]` scaffolds one screen of ground plus a spawn, and
   `list` shows levels.
 
 ### Phaser
-- [ ] `loadPixelforgeLevel(scene, name)` (also called by `loadPixelforgeAll`) does `tilemapTiledJSON` from
+- [x] `loadPixelforgeLevel(scene, name)` (also called by `loadPixelforgeAll`) does `tilemapTiledJSON` from
   `levels/<name>.json`.
-- [ ] `pixelforgeLevel(scene, name, {player})` does all of this and returns
+- [x] `pixelforgeLevel(scene, name, {player})` does all of this and returns
   `{map, layers, player, objects, props, sprites, spawns, triggers}`:
   - background color (or a gradient drawn as a fixed `Graphics`), and accents through `addPixelforgeProp`;
   - layers with properties, collision and animation; `above` layers at depth 1e5;
@@ -168,12 +168,12 @@ New module `pixelforge/level.py`, with `levels/<name>.json` at the project root 
   - the player at `spawn` via `addPixelforgePlayer`, with colliders against layers and solid props;
   - camera bounds/follow/zoom;
   - door/trigger zones that emit `pixelforge-trigger` (object) on overlap.
-- [ ] Node tests with a mock map.
+- [x] Node tests with a mock map.
 
 ### Demo
-- [ ] `levels/village.json`: top-down, on terrain, with the house, chest, knight_topdown, a pond stamp, a door and
+- [x] `levels/village.json`: top-down, on terrain, with the house, chest, knight_topdown, a pond stamp, a door and
   2 screens wide.
-- [ ] `levels/meadow.json`: side view, with the princess. This needs a small **side-view tileset** `platforms`
+- [x] `levels/meadow.json`: side view, with the princess. This needs a small **side-view tileset** `platforms`
   (16×16: grass-topped ground, dirt fill, left/right ledges, a floating platform, a one-way plank) drawn with the
   authoring loop, plus cloud accents.
 

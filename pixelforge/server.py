@@ -4,6 +4,8 @@
 /viewer/*, /phaser/*   from the installed package
 /live/index.json       every asset by kind, built from the working tree (not export/)
 /live/<name>.png|json  the same sheet + JSON `export` would write, rebuilt whenever the sources change
+                       (<prop>_tiles for a sliced building's tileset)
+/live/levels/<name>.json  a level's Tiled map, built from levels/ (tileset images at ../<tileset>.png)
 /api/project           everything the dashboard draws, in one document
 /api/state             cheap poll: source revision, critiques, whether Claude is watching
 POST /api/critiques            {"target": {...}, "text": "..."}  -> the new critique
@@ -22,7 +24,8 @@ from pathlib import Path
 
 from . import __version__
 from . import critiques as cq
-from .export import INDEX_GROUPS, preview_build, prop_info
+from .export import INDEX_GROUPS, build_slices, preview_build, prop_info
+from .level import Level, level_data, levels_dir, list_levels
 from .model import ASSETS, Sprite, SpriteError, describe_entry, list_sprites, project_config, root, sprites_dir, to_hex
 
 
@@ -53,11 +56,23 @@ def project_sig() -> str:
                        *sorted(sprites_dir().glob("*/**/*.txt"))])
 
 
+def level_sig(name: str) -> str:
+    """A level depends on its own file and on every tileset and prop it uses: the whole project."""
+    return project_sig() + _files_sig([levels_dir() / f"{name}.json"])
+
+
+def _png(img) -> bytes:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 class LiveBuilds:
-    """Sheets built straight from sprites/, cached until a source file changes."""
+    """Sheets built straight from sprites/, cached until a source file changes. A sliced building's
+    tileset is `<prop>_tiles`; a level is `level:<name>` (its Tiled map, no image)."""
 
     def __init__(self):
-        self._cache: dict[str, tuple[str, bytes, dict, Sprite]] = {}
+        self._cache: dict[str, tuple] = {}
         self._lock = threading.Lock()
 
     def get(self, name: str) -> tuple[str, bytes, dict, Sprite]:
@@ -68,13 +83,46 @@ class LiveBuilds:
                 return hit
             s = Sprite.load(name)
             img, data = preview_build(s, 1)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            self._cache[name] = entry = (sig, buf.getvalue(), data, s)
+            self._cache[name] = entry = (sig, _png(img), data, s)
             return entry
+
+    def slices(self, prop: str) -> tuple[str, bytes, dict]:
+        sig = asset_sig(prop)
+        key = f"{prop}_tiles"
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and hit[0] == sig:
+                return hit
+            img, data = build_slices(Sprite.load(prop), 1)
+            self._cache[key] = entry = (sig, _png(img), data)
+            return entry
+
+    def level(self, name: str) -> tuple[str, dict]:
+        sig = level_sig(name)
+        key = f"level:{name}"
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and hit[0] == sig:
+                return hit
+        data = level_data(Level.load(name))   # slow (it builds every tileset it uses): don't hold the lock
+        with self._lock:
+            self._cache[key] = entry = (sig, data)
+        return entry
 
 
 BUILDS = LiveBuilds()
+
+
+def sliced_props() -> list[str]:
+    out = []
+    for n in list_sprites():
+        try:
+            s = BUILDS.get(n)[3]
+        except Exception:
+            continue
+        if s.kind == "prop" and s.slice:
+            out.append(n)
+    return out
 
 
 def live_index() -> dict:
@@ -85,6 +133,8 @@ def live_index() -> dict:
         except Exception:
             continue
         found[{"prop": "props", "tileset": "tilesets", "icons": "icons", "font": "fonts"}.get(kind, "sprites")].append(n)
+    found["tilesets"] = sorted(found["tilesets"] + [f"{p}_tiles" for p in sliced_props()])
+    found["levels"] = list_levels()
     return found
 
 
@@ -171,6 +221,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(state_data())
             if parts[0] == "live" and len(parts) == 2:
                 return self._live(parts[1])
+            if parts[:2] == ["live", "levels"] and len(parts) == 3 and parts[2].endswith(".json"):
+                name = parts[2][:-5]
+                if name not in list_levels():
+                    return self._json({"error": f"no level {name}"}, 404)
+                return self._json(BUILDS.level(name)[1])
         except (SpriteError, ValueError, OSError) as e:
             return self._json({"error": str(e)}, 500)
         super().do_GET()
@@ -179,9 +234,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if file == "index.json":
             return self._json(live_index())
         name, _, ext = file.rpartition(".")
-        if name not in list_sprites() or ext not in ("png", "json"):
+        if ext not in ("png", "json"):
             return self._json({"error": f"no live asset {file}"}, 404)
-        _, png, data, _ = BUILDS.get(name)
+        if name not in list_sprites() and name.endswith("_tiles") and name[:-6] in sliced_props():
+            _, png, data = BUILDS.slices(name[:-6])
+        elif name in list_sprites():
+            _, png, data, _ = BUILDS.get(name)
+        else:
+            return self._json({"error": f"no live asset {file}"}, 404)
         if ext == "json":
             return self._json(data)
         self.send_response(200)

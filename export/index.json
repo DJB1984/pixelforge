@@ -12,6 +12,7 @@
   ],
   "tilesets": [
     "house_tiles",
+    "platforms",
     "terrain"
   ],
   "icons": [
@@ -19,5 +20,9 @@
   ],
   "fonts": [
     "font"
+  ],
+  "levels": [
+    "meadow",
+    "village"
   ]
 }

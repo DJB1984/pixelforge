@@ -690,8 +690,7 @@ export function pixelforgeLevel(scene, name, opts = {}) {
       }
       if (info.view === 'side' && player.y > H + 64 && opts.respawn !== false) {
         scene.events.emit('pixelforge-fell', player);
-        player.setPosition(spawn.x, spawn.y);
-        player.body.reset(spawn.x, spawn.y);
+        player.body.reset(spawn.x, spawn.y);   // moves the sprite too, and stops it
       }
     };
     scene.events.on('update', tick);

@@ -147,6 +147,65 @@ import { loadPixelforgeAll, createPixelforgeAll, addPixelforgePlayer, pixelforge
   check('createPixelforgeAll makes the missing anims', created, ['hero']);
 }
 
+// ---- pixelforgeLevel: a mock map, scene and Arcade world ----------------------------------------
+import { pixelforgeLevel } from '../pixelforge/assets/phaser/pixelforge.js';
+{
+  const info = { name: 'v', view: 'side', size: [64, 32], tilesets: ['t'], background: { color: '#123456' },
+    accents: [{ prop: 'cloud', at: [5, 6] }], player: 'hero', camera: { zoom: 2 },
+    layers: [{ name: 'ground', above: false }, { name: 'roof', above: true }],
+    objects: [{ id: 1, name: 'player', type: 'spawn', x: 10, y: 20 }, { id: 2, name: 'chest', type: 'chest', prop: 'chest', state: 'open', x: 40, y: 32 },
+              { id: 3, name: 'door', type: 'door', to: 'inn', x: 52, y: 32, rect: [48, 16, 16, 16] }] };
+  const json = {
+    t: { tilewidth: 16, tileheight: 16, margin: 0, spacing: 1, pixelforge: { names: ['g'], properties: [{}], animations: {} } },
+    hero: { meta: { pixelforge: { animations: { hero_idle: {} }, body: { x: 0, y: 0, w: 8, h: 8 }, view: 'side' } } },
+    chest: { meta: { pixelforge: { animations: { chest_closed: {}, chest_open: {} }, body: { x: 0, y: 8, w: 16, h: 8 },
+                                   prop: { layer: 'world', scroll: 1, solid: true, ysort: false } } } },
+    cloud: { meta: { pixelforge: { animations: { cloud_idle: {} }, body: { x: 0, y: 0, w: 4, h: 4 },
+                                   prop: { layer: 'back', scroll: 0.3, solid: false, ysort: false } } } },
+  };
+  const log = [], listeners = {}, emitted = [];
+  const chain = (o) => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => chain(t)) });   // any other method: chainable no-op
+  const mkSprite = (x, y, key, kind) => { const s = mockSprite(scene, x, y, key); s.kind = kind; log.push([kind, key, x, y]);
+    s.setScrollFactor = () => s; s.body.reset = (nx, ny) => { s.x = nx; s.y = ny; }; return s; };
+  const layer = (name) => chain({ name, scene, depth: 0, tileset: [{ image: { key: 't' }, firstgid: 1 }], forEachTile: () => {},
+    setDepth(d) { this.depth = d; log.push(['depth', name, d]); return this; } });
+  const cam = chain({ setBackgroundColor(c) { log.push(['bg', c]); return cam; }, setZoom(z) { log.push(['zoom', z]); return cam; },
+    startFollow(t) { log.push(['follow', t.texture.key]); return cam; } });
+  const scene = {
+    cache: { json: { get: (k) => json[k] }, tilemap: { get: () => ({ data: { pixelforge: info } }) } },
+    make: { tilemap: () => ({ scene, addTilesetImage: (n) => ({ name: n }), createLayer: (n) => layer(n) }) },
+    cameras: { main: cam }, anims: { exists: () => true },
+    events: { on: (e, f) => { (listeners[e] ??= []).push(f); }, once: () => {}, off: () => {}, emit: (...a) => emitted.push(a) },
+    add: { sprite: (x, y, k) => mkSprite(x, y, k, 'plain'), graphics: () => chain({}) },
+    physics: { world: { gravity: { y: 0 }, setBounds: (...a) => log.push(['bounds', ...a]) },
+               add: { sprite: (x, y, k) => mkSprite(x, y, k, 'dynamic'), staticSprite: (x, y, k) => mkSprite(x, y, k, 'static'),
+                      collider: (a, b) => log.push(['collider', a.texture?.key ?? a.name, b.texture?.key ?? b.name]) } },
+  };
+  const level = pixelforgeLevel(scene, 'v');
+  check('level: background color', log.find((l) => l[0] === 'bg'), ['bg', '#123456']);
+  check('level: accents and props placed', log.filter((l) => ['plain', 'static', 'dynamic'].includes(l[0])),
+        [['plain', 'cloud', 5, 6], ['static', 'chest', 40, 32], ['dynamic', 'hero', 10, 20]]);
+  check('level: ground under everything, roof over the characters', log.filter((l) => l[0] === 'depth'),
+        [['depth', 'ground', -5000], ['depth', 'roof', 100000]]);
+  check('level: side view can fall out of the bottom', log.find((l) => l[0] === 'bounds'), ['bounds', 0, 0, 64, 32, true, true, true, false]);
+  check('level: player collides with each layer and the solid prop', log.filter((l) => l[0] === 'collider'),
+        [['collider', 'hero', 'ground'], ['collider', 'hero', 'roof'], ['collider', 'hero', 'chest']]);
+  check('level: camera zoom and follow', log.filter((l) => l[0] === 'zoom' || l[0] === 'follow'), [['zoom', 2], ['follow', 'hero']]);
+  check('level: chest plays its state', level.props[0].anims.currentAnim.key, 'chest_open');
+  check('level: spawns and triggers', [Object.keys(level.spawns), level.triggers.map((o) => o.name)], [['player'], ['door']]);
+  const p = level.player, tickLevel = () => listeners.update.forEach((f) => f(0, 16));
+  Object.assign(p.body, { x: 10, y: 10, width: 8, height: 8 });
+  tickLevel();
+  check('level: no trigger outside the door', emitted.length, 0);
+  Object.assign(p.body, { x: 50, y: 20 });
+  tickLevel(); tickLevel();
+  check('level: walking into the door triggers once', emitted.map((e) => [e[0], e[1].name]), [['pixelforge-trigger', 'door']]);
+  Object.assign(p.body, { x: 10, y: 10 }); tickLevel(); Object.assign(p.body, { x: 50, y: 20 }); tickLevel();
+  check('level: leaving and coming back triggers again', emitted.length, 2);
+  emitted.length = 0; p.y = 200; Object.assign(p.body, { x: 0, y: 0 }); tickLevel();
+  check('level: falling out respawns at the spawn', [emitted.map((e) => e[0]), p.x, p.y], [['pixelforge-fell'], 10, 20]);
+}
+
 // ---- addPixelforgePlayer: a mock Arcade world, driven through controller.override ---------------
 function playerWorld(name, animations, pf = {}) {
   const listeners = {};

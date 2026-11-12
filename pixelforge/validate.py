@@ -421,7 +421,7 @@ def check_level(name: str) -> list[Issue]:
         elif o.to and o.to not in known:
             issues.append(Issue("error", f"level {name}/{o.source}", f"door to {o.to!r}: no such level "
                                                                      f"(known: {', '.join(known)})"))
-        x, y, w, h = o.rect or o.art or (o.x, o.y, 1, 1)
+        x, y, w, h = o.rect or o.art or (o.x, o.y - 1, 1, 1)   # a point stands on the pixel above it
         if x + w <= 0 or y + h <= 0 or x >= W or y >= H:
             issues.append(Issue("warn", f"level {name}/{o.source}", f"{o.name!r} at ({o.x}, {o.y}) is outside the "
                                                                     f"{W}x{H} level"))

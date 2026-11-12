@@ -9,8 +9,10 @@ sprites/<name>/sprite.json    size, origin, palette, animations
 sprites/<name>/frames/*.txt   one frame or layer per file: H lines of W chars (the whole canvas)
 sprites/<name>/parts/*.txt    small pieces of any size (a door, a window), placed on the canvas with "at"
 sprites/<name>/glyphs.txt     a font's letters (fonts only)
+levels/<name>.json            a whole level: tile rows, stamps, objects, player, camera (see Levels)
 export/<name>.png|.json       generated: Phaser load.aseprite format, or a Tiled tileset for tilesets (+ index.json, pixelforge.js)
-                              (+ <name>.xml for fonts, <name>_tiles.png|.json for sliced buildings)
+                              (+ <name>.xml for fonts, <name>_tiles.png|.json for sliced buildings,
+                              levels/<name>.json: each level as a Tiled map)
 export/gallery.html           generated: shareable page of every sprite (`pixelforge gallery`)
 critiques.json                notes the developer left in the dashboard for you to fix (`pixelforge critiques`)
 previews/                     generated: renders, sheets, GIFs (gitignored)
@@ -126,6 +128,64 @@ A tileset is a sprite folder with `"type": "tileset"`. Its frames are tiles inst
 - Export gives `export/<name>.png` (a grid, 1px spacing) plus `export/<name>.json`, a **Tiled tileset**: open it in Tiled to paint real levels, then embed the tileset in the map (Phaser can't read external tilesets).
 - Reference: `sprites/terrain` in the pixelforge repo.
 
+## Levels
+A level is `levels/<name>.json` (next to `sprites/`): the map as rows of characters, like a tileset's sample.
+`new-level NAME [--size 40x12] [--tileset terrain]` starts one screen of ground with a spawn.
+```json
+{"name": "village", "view": "topdown", "tileset": "terrain",
+ "background": {"color": "#3e8948"},                      // or {"gradient": ["#124e89", "#0099db"]} (top, bottom)
+ "accents": [{"prop": "cloud", "at": [40, 20]}],          // background props, in parallax space
+ "legend": {"W": "auto:water", "r": {"tileset": "kit", "tile": "roof"}},
+ "layers": [{"name": "ground", "rows": ["gggg", "gWWg"]},
+            {"name": "decor",  "rows": ["....", "...."]},
+            {"name": "roofs",  "rows": ["....", "...."], "above": true}],
+ "stamps": [{"stamp": "pond", "at": [4, 6]},
+            {"tileset": "house_tiles", "stamp": "house", "at": [10, 2], "layer": "decor"}],
+ "objects": {"legend": {"H": {"prop": "house", "snap": "left"},
+                        "c": {"prop": "chest", "type": "chest", "state": "closed", "props": {"loot": "key"}},
+                        "s": {"sprite": "slime", "type": "enemy"},
+                        "D": {"type": "door", "to": "inn", "size": [2, 1]}},
+             "rows": ["....", "@.c."],
+             "list": [{"prop": "sign", "at": [123, 88], "props": {"text": "Welcome"}}]},
+ "player": "knight_topdown", "camera": {"zoom": 1}}
+```
+- **Tile layers:** every layer is the same size. `.` and space are empty. The legend starts from the tileset's sample
+  legend. A value is a tile name, `{"tileset", "tile"}` for another tileset (a sliced building's `<prop>_tiles`
+  too), or `auto:<terrain>`. `above: true` layers draw over the characters (roofs, treetops).
+- **Autotiling:** give the tileset `"autotile": {"water": {"base": "water", "edges": {"n": "water_n", "s": "water_s",
+  "ne": "water_ne"}}}`. Each `auto:water` cell picks the most specific edge tile for the sides whose neighbour isn't
+  water (`ne` before `n` before the base). The result is baked into the export, so the game never autotiles.
+- **Stamps** go on the first layer (or `"layer"`). Tiles marked `above` (a sliced top-down roof) go on the first
+  `above` layer, which is created if the level has none.
+- **Objects:** a character in `objects.rows` puts the object's origin at that cell's bottom-centre.
+  - `"snap": "left"` lines a prop's canvas up with the cell's left edge (tile-sized buildings).
+  - `"offset": [dx, dy]` nudges it, and `objects.list` places objects by pixel with `"at"`.
+  - `type` is yours to define (`enemy`, `item`, `npc`...); `props` passes through to the game.
+  - `@` is the player spawn by default. `door` and `trigger` objects (or any with `"size"` in tiles) are areas,
+    and every other object is a point.
+  - A door's `"to"` is a level name. `"spawn"` names the spawn object to arrive at.
+- `view` defaults to `pixelforge.json`'s. `camera.zoom` (default 1) zooms the camera inside the game's
+  `resolution`, so one screen shows `resolution / zoom` world pixels.
+- `check` lints levels too:
+  - Errors: unknown characters, missing tilesets, tiles, props, sprites or stamps, ragged rows, layers of
+    different sizes, no spawn, a spawn on a colliding tile or inside a solid footprint, and a door to a missing level.
+  - Warnings: solid footprints that overlap, and, in top-down and overhead levels, doors, chests, items and objects
+    with `props` that can't be walked to from the spawn. Side-view routes need a playtest.
+- `export` writes `export/levels/<name>.json`: a Tiled map with the tilesets embedded and an `objects` group (open it
+  in Tiled). `list` shows the levels.
+- Play a level in the dashboard's `/viewer/play.html?level=NAME` (live from `levels/`). Doors lead to their level.
+- In Phaser, `loadPixelforgeAll` loads the levels, and `pixelforgeLevel` builds one:
+  ```js
+  const level = pixelforgeLevel(this, 'village');   // { map, layers, player, objects, props, sprites, spawns, triggers }
+  this.events.on('pixelforge-trigger', (obj, player) => { if (obj.type === 'door') this.scene.restart({ level: obj.to }); });
+  ```
+  It sets the background and accents; the layers with their properties, collision and animation (`oneway` tiles
+  are planks you jump up through); props, and sprites playing idle; the player at the spawn, colliding with the
+  layers and solid props; and the camera bounds, follow and zoom. Options: `player`, `spawn`, `playerOptions` (for
+  the controller), and `respawn: false` (a side-view fall emits `pixelforge-fell` and goes back to the spawn
+  unless you set it).
+- Tiled wangsets (Tiled's own autotiling) aren't exported yet.
+
 ## Hurtboxes and hitboxes
 Boxes are computed from the art on export, so nobody draws them by hand:
 ```json
@@ -141,7 +201,8 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 ## Commands
 | | |
 |---|---|
-| `list` | sprites + animations |
+| `list` | sprites + animations, and levels |
+| `new-level NAME [--size WxH] [--tileset T]` | scaffold `levels/NAME.json`: one screen of ground and a spawn |
 | `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
 | `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
 | `resize S WxH` / `resize S --class C` | re-canvas every frame, keeping the character on its origin |
