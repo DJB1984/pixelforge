@@ -1,3 +1,3 @@
 """pixelforge: author pixel art as text grids, preview it, lint it, export it for Phaser."""
 
-__version__ = "0.8.0"  # single source of truth (pyproject reads it); tag releases as v<version>
+__version__ = "0.9.0"  # single source of truth (pyproject reads it); tag releases as v<version>
