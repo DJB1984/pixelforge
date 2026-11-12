@@ -520,9 +520,16 @@ export class PixelforgeController {
     return out;
   }
 
+  // Hands the body to physics for `ms` (knockback, a cutscene shove): no input, no velocity changes.
+  stun(ms) {
+    this.stunnedUntil = Math.max(this.stunnedUntil ?? 0, (this.sprite.scene.time?.now ?? 0) + ms);
+    return this;
+  }
+
   update(time) {
     const s = this.sprite;
     if (!s.active || !s.body) return;
+    if (time < (this.stunnedUntil ?? 0)) { this.prev = { ...NO_INPUT }; return; }
     this.input = this.readInput();
     if (this.view === 'side') this.updateSide(time, this.input);
     else if (this.view === 'overhead') this.updateOverhead(this.input);
@@ -689,7 +696,7 @@ export function pixelforgeLevelInfo(scene, name) {
 // 'pixelforge-trigger' (object, player) on the scene's events when the player walks in. A side-view
 // player who falls out of the level emits 'pixelforge-fell' and goes back to the spawn
 // (opts.respawn: false to handle it yourself).
-// Returns { map, layers, player, objects, props, sprites, spawns, triggers, accents, info }.
+// Returns { name, map, layers, player, objects, props, sprites, spawns, triggers, accents, info }.
 export function pixelforgeLevel(scene, name, opts = {}) {
   const info = pixelforgeLevelInfo(scene, name);
   const [W, H] = info.size;
@@ -763,7 +770,91 @@ export function pixelforgeLevel(scene, name, opts = {}) {
     scene.events.once('shutdown', () => scene.events.off('update', tick));
   }
   if (info.view !== 'side') keepPixelforgeDepth(scene, sprites);
-  return { map, layers, player, objects, props, sprites, spawns, triggers, accents, info };
+  return { name, map, layers, player, objects, props, sprites, spawns, triggers, accents, info };
+}
+
+// ---- the playtest hook -----------------------------------------------------------------------------
+// installPixelforgePlay(this, level) in the level scene's create (after pixelforgeLevel, and again after
+// every restart) puts window.pixelforgePlay on the page. `pixelforge play` drives the game through it, and
+// so can you from the browser console:
+//   await pixelforgePlay.ready                          resolves once a level is running
+//   pixelforgePlay.step(500, { right: true, run: true }) holds those keys for 500 ms of game time
+//   pixelforgePlay.state()   { level, x, y, vx, vy, onGround, facing, anim, ...opts.extra(), events }
+//   pixelforgePlay.release()                            the real-time loop and the keyboard again
+// step() first freezes the real-time loop (freeze()), then advances whole 60 fps frames, so a run is
+// the same every time. `events` are the triggers, jumps, lands, attacks, hits and falls since the last
+// state(); log({type, ...}) adds your own. opts.extra returns more to report (health, coins...).
+const PLAY_FRAME = 1000 / 60;
+const playFrameDelta = () => PLAY_FRAME;
+
+// Tweens run on their own Date.now() clock (Phaser 3.60+), so a frozen game's tweens would stand still.
+// While frozen, every scene's tween manager advances one frame per step instead.
+function freezeTweens(game, frozen) {
+  for (const s of game.scene?.scenes ?? []) {
+    const tm = s.sys?.tweens;
+    if (!tm) continue;
+    if (frozen) tm.getDelta = playFrameDelta;
+    else if (tm.getDelta === playFrameDelta) delete tm.getDelta;
+  }
+}
+
+export function installPixelforgePlay(scene, level, opts = {}) {
+  const w = typeof window !== 'undefined' ? window : globalThis;
+  const game = scene.game;
+  let play = w.pixelforgePlay;
+  if (!play || play.game !== game) {
+    let resolve;
+    play = { game, events: [], frozen: false, time: 0, input: null };
+    play.ready = new Promise((r) => { resolve = r; });
+    play.resolve = resolve;
+    play.log = (e) => { play.events.push({ t: Math.round(play.scene?.time?.now ?? 0), ...e }); };
+    play.freeze = () => {
+      if (!play.frozen) {
+        game.loop.sleep();
+        play.frozen = true;
+        play.time = game.loop.now || 0;
+      }
+      return play;
+    };
+    play.step = (ms = PLAY_FRAME, input = {}) => {
+      play.freeze();
+      play.input = input ?? {};
+      for (let i = 0, n = Math.max(1, Math.round(ms / PLAY_FRAME)); i < n; i++) {
+        const c = play.player?.controller;   // a door may have swapped the player since the last frame
+        if (c) c.override = play.input;
+        play.time += PLAY_FRAME;
+        freezeTweens(game, true);   // again each frame: a restart or a new scene brings its own manager
+        game.step(play.time, PLAY_FRAME);
+      }
+      return play.state();
+    };
+    play.release = () => {
+      play.input = null;
+      const c = play.player?.controller;
+      if (c) c.override = null;
+      if (play.frozen) { play.frozen = false; freezeTweens(game, false); game.loop.wake(); }
+      return play;
+    };
+    play.state = () => ({ level: play.level?.name ?? null, ...(play.player?.controller?.state() ?? {}),
+                          ...(play.extra?.() ?? {}), events: play.events.splice(0) });
+    w.pixelforgePlay = play;
+  }
+  play.scene = scene;
+  play.level = level;
+  play.player = level.player;
+  play.extra = opts.extra;
+  const p = level.player;
+  if (p) {
+    if (play.input) p.controller.override = play.input;
+    for (const e of ['jump', 'land', 'attack']) p.on(`pixelforge-${e}`, () => play.log({ type: e }));
+    p.on('pixelforge-hit', (t) => play.log({ type: 'hit', target: t?.pixelforgeObject?.name ?? t?.texture?.key ?? null }));
+    p.on('pixelforge-trigger', (o) => play.log({ type: 'trigger', name: o.name, object: o.type, to: o.to ?? null }));
+  }
+  const fell = () => play.log({ type: 'fell' });
+  scene.events.on('pixelforge-fell', fell);
+  scene.events.once('shutdown', () => scene.events.off('pixelforge-fell', fell));
+  play.resolve(play);
+  return play;
 }
 
 // A character standing in a level (an NPC or an enemy): an immovable Arcade sprite (a plain one without

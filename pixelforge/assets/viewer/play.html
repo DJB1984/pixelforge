@@ -27,7 +27,8 @@
 <div id="game"></div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script type="module">
-import { loadPixelforgeAll, createPixelforgeAll, pixelforgeLevel, addPixelforgeHud, drawPixelforgeBoxes } from '../phaser/pixelforge.js';
+import { loadPixelforgeAll, createPixelforgeAll, pixelforgeLevel, addPixelforgeHud, drawPixelforgeBoxes,
+         installPixelforgePlay } from '../phaser/pixelforge.js';
 
 // Plays a level the way the game does (pixelforgeLevel + addPixelforgePlayer), from `pixelforge serve`'s
 // live builds: edit levels/ or sprites/ and reload. Doors lead to their level. The HUD is pixelforge.json's.
@@ -53,7 +54,6 @@ const HELP = {
   topdown: '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD walk · <kbd>X</kbd> attack',
   overhead: '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD move · <kbd>X</kbd> attack',
 };
-window.pixelforgeEvents = [];
 
 class PlayScene extends Phaser.Scene {
   constructor() { super('play'); }
@@ -62,20 +62,16 @@ class PlayScene extends Phaser.Scene {
   create() {
     createPixelforgeAll(this);
     this.level = pixelforgeLevel(this, this.levelName, { spawn: this.spawn });
-    window.pixelforgeLevelState = this.level;
     window.pixelforgeHud = addPixelforgeHud(this);   // pixelforge.json "hud", in its own scene
+    installPixelforgePlay(this, this.level);         // window.pixelforgePlay, for `pixelforge play`
     $('help').innerHTML = HELP[this.level.info.view] ?? '';
-    const player = this.level.player;
-    if (player) for (const e of ['pixelforge-land', 'pixelforge-jump', 'pixelforge-attack']) {
-      player.on(e, () => window.pixelforgeEvents.push({ type: e.slice(11), t: Math.round(this.time.now) }));
-    }
-    this.events.on('pixelforge-fell', () => window.pixelforgeEvents.push({ type: 'fell', t: Math.round(this.time.now) }));
-    this.events.on('pixelforge-trigger', (o) => {
-      window.pixelforgeEvents.push({ type: 'trigger', name: o.name, object: o.type, to: o.to ?? null, t: Math.round(this.time.now) });
+    const onTrigger = (o) => {
       if (o.type === 'door' && o.to && levels.includes(o.to) && !params.has('test')) {
         this.time.delayedCall(0, () => this.scene.restart({ level: o.to, spawn: o.spawn }));
       }
-    });
+    };
+    this.events.on('pixelforge-trigger', onTrigger);
+    this.events.once('shutdown', () => this.events.off('pixelforge-trigger', onTrigger));
     this.debug = this.add.graphics().setDepth(2e5);
   }
   update() {

@@ -370,3 +370,60 @@ import { addPixelforgeHud, PIXELFORGE_HUD } from '../pixelforge/assets/phaser/pi
   again.set('hp', 0);
   check('hud: set(0) hides them all', again.items.hp.map((o) => o.visible), [false, false]);
 }
+
+// ---- controller.stun: physics owns the body for a while (knockback) ---------------------------------
+{
+  const { scene, tick } = playerWorld('k', { k_idle: {}, k_walk: {} });
+  scene.time = { now: 100 };
+  const p = addPixelforgePlayer(scene, 50, 100, 'k');
+  p.controller.override = { right: true };
+  tick(100);
+  p.controller.stun(200);
+  p.body.setVelocity(-140, -160);
+  tick(200);
+  check('stun: velocity left alone while stunned', [p.body.velocity.x, p.body.velocity.y], [-140, -160]);
+  tick(301);
+  check('stun: input drives it again after', p.body.velocity.x, 70);
+}
+
+// ---- installPixelforgePlay: window.pixelforgePlay over a mock game ----------------------------------
+import { installPixelforgePlay } from '../pixelforge/assets/phaser/pixelforge.js';
+{
+  const tm = {};
+  const calls = [], frames = [];
+  const handlers = {};
+  const player = { x: 0, on: (e, f) => { handlers[e] = f; },
+                   controller: { override: null, state: () => ({ x: player.x, anim: 'p_walk' }) } };
+  const game = {
+    loop: { now: 1000, sleep: () => calls.push('sleep'), wake: () => calls.push('wake') },
+    scene: { scenes: [{ sys: { tweens: tm } }] },
+    step: (t, d) => {
+      frames.push([Math.round(t), Math.round(d * 100) / 100, Math.round((tm.getDelta?.() ?? 0) * 100) / 100]);
+      if (player.controller.override?.right) player.x += 1;
+    },
+  };
+  const sceneEvents = { list: {}, on(e, f) { this.list[e] = f; }, once() {}, off(e) { delete this.list[e]; } };
+  const scene = { game, time: { now: 0 }, events: sceneEvents };
+  const play = installPixelforgePlay(scene, { name: 'meadow', player }, { extra: () => ({ health: 3 }) });
+  check('play: on window', globalThis.pixelforgePlay === play, true);
+  check('play: ready resolves to it', (await play.ready) === play, true);
+  const s = play.step(100, { right: true });
+  check('play: step freezes the loop, then whole 60fps frames', [calls, frames.length, frames[0].slice(0, 2)],
+    [['sleep'], 6, [1017, 16.67]]);
+  check('play: tweens advance one frame per step while frozen', frames[0][2], 16.67);
+  check('play: input held as the override', [player.controller.override, s.x], [{ right: true }, 6]);
+  check('play: state = level + controller + extra', [s.level, s.anim, s.health], ['meadow', 'p_walk', 3]);
+  handlers['pixelforge-jump']();
+  handlers['pixelforge-trigger']({ name: 'door', type: 'door', to: 'village' });
+  sceneEvents.list['pixelforge-fell']();
+  check('play: events since the last state()', play.state().events.map((e) => [e.type, e.to ?? null]),
+    [['jump', null], ['trigger', 'village'], ['fell', null]]);
+  check('play: then empty', play.state().events, []);
+  play.release();
+  check('play: release hands back the keyboard and the loop', [player.controller.override, calls.at(-1), 'getDelta' in tm],
+    [null, 'wake', false]);
+  const player2 = { x: 50, on: () => {}, controller: { override: null, state: () => ({ x: 50 }) } };
+  const again = installPixelforgePlay(scene, { name: 'village', player: player2 });
+  const st = again.state();
+  check('play: a restart re-attaches the same hook', [again === play, st.level, st.x], [true, 'village', 50]);
+}

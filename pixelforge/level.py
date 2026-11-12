@@ -602,7 +602,18 @@ def export_level(lv: Level, out_dir: Path | None = None) -> Path:
 
 
 # ---- scaffolding --------------------------------------------------------------------------------
-def new_level(name: str, size: tuple[int, int] | None = None, tileset: str | None = None) -> Path:
+def default_player(view: str) -> str | None:
+    """The character a new level is played with: the first one drawn for this view, else the first one."""
+    chars = list_sprites("sprite")
+    def fits(n):
+        meta = json.loads((root() / "sprites" / n / "sprite.json").read_text(encoding="utf-8"))
+        own = meta.get("view") or (meta.get("class") if meta.get("class") in ("topdown", "overhead") else "side")
+        return own == view
+    return next((n for n in chars if fits(n)), chars[0] if chars else None)
+
+
+def new_level(name: str, size: tuple[int, int] | None = None, tileset: str | None = None,
+              player: str | None = None) -> Path:
     """One screen of ground plus a spawn in the middle: a level to build on."""
     p = levels_dir() / f"{name}.json"
     if p.exists():
@@ -633,6 +644,9 @@ def new_level(name: str, size: tuple[int, int] | None = None, tileset: str | Non
     objects[spawn_row] = "." * (w // 2) + "@" + "." * (w - w // 2 - 1)
     level["layers"] = [{"name": "ground", "rows": rows}]
     level["objects"] = {"rows": objects}
+    player = player or default_player(view)
+    if player:
+        level["player"] = player
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(level, indent=2) + "\n", encoding="utf-8")   # one map row per line
     return p

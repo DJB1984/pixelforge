@@ -224,7 +224,7 @@ open the level in the dashboard, pin a critique on a spot, and play it.
 ---
 
 ## Phase 4: Game starter (`pixelforge game`)
-- [ ] `pixelforge game [--force]`, run in a pixelforge project root, scaffolds a Phaser + Vite game around the art
+- [x] `pixelforge game [--force]`, run in a pixelforge project root, scaffolds a Phaser + Vite game around the art
   folder. It never overwrites existing files without `--force`, and the files are game-owned (not managed by
   `upgrade`).
   - `package.json`: `phaser@3.90.0`, `vite` pinned to a release at least 2 weeks old; scripts `dev`, `build`.
@@ -240,10 +240,14 @@ open the level in the dashboard, pin a critique on a spot, and play it.
   - `src/game.js`: a small state object (health, coins, inventory) with an event bus.
   - Import the helper from `../export/pixelforge.js`, and pixelforge.json via Vite's JSON import.
   - A `.gitignore` for `node_modules/` and `dist/`.
-- [ ] Guide: a "Building the game" section. `npm install && npm run dev` runs the game; `pixelforge serve` is the
+  - (Done, with `src/objects/Walker.js` as the example enemy, chests and items, and Vite 8.3.5. The playtest hook is
+    `installPixelforgePlay` in `pixelforge.js`, not in the game-owned Level.js, so Phase 5 can change it without
+    re-scaffolding games. On the way: `new-level` sets `"player"` (`--player`), `new` scaffolds `idle_down` for
+    top-down characters, `controller.stun(ms)` for knockback, and frozen stepping drives tweens too.)
+- [x] Guide: a "Building the game" section. `npm install && npm run dev` runs the game; `pixelforge serve` is the
   art dashboard. The game reads `export/`, so run `export` after art changes (an auto-exporting watch mode is out
   of scope). Describe how to add enemies (an object type → a class in `src/`), items and doors.
-- [ ] Test: scaffold into a temp dir; files exist; `package.json` is valid; re-running doesn't overwrite. If Node
+- [x] Test: scaffold into a temp dir; files exist; `package.json` is valid; re-running doesn't overwrite. If Node
   and npm are installed, `npx vite build` succeeds (skip otherwise; a slow test is fine behind an env flag).
 
 **Done when** a fresh `pixelforge init --view topdown` + `new` art + `new-level` + `pixelforge game` +
@@ -255,7 +259,8 @@ open the level in the dashboard, pin a critique on a spot, and play it.
 - [ ] Add an optional dependency in `pyproject.toml`:
   `[project.optional-dependencies] play = ["playwright>=1.40"]`. When it's missing, the command explains
   `pip install -e ".[play]" && playwright install chromium`.
-- [ ] Add `window.pixelforgePlay` to `play.html` and the starter's Level scene:
+- [x] Add `window.pixelforgePlay` to `play.html` and the starter's Level scene (done in Phase 4 as
+  `installPixelforgePlay(scene, level, {extra})` in `pixelforge.js`; Node-tested and driven in Chrome):
   - `ready` (a promise);
   - `freeze()`: `game.loop.sleep()`, then step manually with `game.step(t, 1000/60)` for determinism;
   - `step(ms, input)` sets `player.controller.override` and advances frames;

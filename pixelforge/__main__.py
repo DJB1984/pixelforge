@@ -95,12 +95,13 @@ def _split(names: list[str]) -> tuple[list[str], list[str]]:
 
 def cmd_new_level(args):
     try:
-        p = lvl.new_level(args.name, _size(args.size) if args.size else None, args.tileset)
+        p = lvl.new_level(args.name, _size(args.size) if args.size else None, args.tileset, args.player)
     except SpriteError as e:
         sys.exit(str(e))
     lv = lvl.Level.load(args.name)
     print(f"created {_rel(p)}: {lv.width}x{lv.height} tiles of {lv.tileset}, {lv.view} view, a spawn ('@') in "
-          f"objects.rows")
+          f"objects.rows, " + (f"played as {lv.player}" if lv.player else
+                               "no player yet (draw a character, then set \"player\")"))
 
 
 def cmd_level(args):
@@ -161,7 +162,9 @@ def cmd_new(args):
     meta.update({
         "palette": {"k": "outline", "w": "white"},
         "roles": {"weapon*": "hit", "fx_*": "hit"},
-        "animations": {"idle": {"fps": 4, "loop": True, "frames": ["idle_0"]}},
+        # top-down animations are <action>_<down|up|side> (playFacing and the player controller rely on it)
+        "animations": {"idle_down" if args.cls == "topdown" and not args.size else "idle":
+                       {"fps": 4, "loop": True, "frames": ["idle_0"]}},
     })
     (path / "frames").mkdir(parents=True)
     (path / "frames" / "idle_0.txt").write_text(Grid.blank(w, h).to_text(), encoding="utf-8")
@@ -700,6 +703,22 @@ def cmd_upgrade(args):
         print(f"  note: {n}")
 
 
+def cmd_game(args):
+    """Scaffold a Phaser + Vite game around this art folder."""
+    from .game import scaffold_game
+    target = root()
+    try:
+        report = scaffold_game(target, force=args.force)
+    except FileNotFoundError as e:
+        sys.exit(str(e))
+    print(f"Phaser + Vite game starter in {target}")
+    for c in report.changes:
+        print(f"  {c}")
+    for n in report.notes:
+        print(f"  note: {n}")
+    print("next: npm install && npm run dev   (http://localhost:5173; run `pixelforge export` after art changes)")
+
+
 def cmd_gallery(args):
     out = Path(args.out) if args.out else ex.export_dir() / "gallery.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -727,6 +746,10 @@ def main(argv=None):
     q.add_argument("--no-export", action="store_true", help="skip re-exporting sprites")
     q.set_defaults(fn=cmd_upgrade)
 
+    q = sub.add_parser("game", help="scaffold a Phaser + Vite game around this folder (src/, index.html, package.json)")
+    q.add_argument("--force", action="store_true", help="replace starter files that already exist")
+    q.set_defaults(fn=cmd_game)
+
     q = sub.add_parser("gallery", help="self-contained HTML page of every sprite + animation")
     q.add_argument("sprites", nargs="*")
     q.add_argument("--out", help="default: export/gallery.html")
@@ -739,6 +762,7 @@ def main(argv=None):
     q.add_argument("name")
     q.add_argument("--size", help="WxH in tiles (default: one screen at the game's resolution)")
     q.add_argument("--tileset", help="default: the first tileset")
+    q.add_argument("--player", help="the character it's played with (default: the first one drawn for the view)")
     q.set_defaults(fn=cmd_new_level)
 
     q = sub.add_parser("level", help="render a whole level (screen grid, labels), or --screens / --at X,Y: what "

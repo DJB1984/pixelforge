@@ -32,6 +32,7 @@ previews/                     generated: renders, sheets, GIFs (gitignored)
 `pixelforge.json` says how the game looks, and `new`, `check` and the Phaser helper follow it:
 - `"view"`: `"side"` (platformers), `"topdown"` (3/4 view RPGs) or `"overhead"` (bird's-eye). It picks `new`'s default class, a prop's default footprint and whether props y-sort. One sprite can override it with its own `"view"`.
 - `"resolution"`: the game's screen before scaling, e.g. `[320, 180]`. `check` warns when a prop is bigger than the screen.
+- `"zoom"` (optional, default 3): screen pixels per game pixel in the game (`pixelforge game`) and the Play tab.
 - `"hud"` (optional): what's drawn over every screen, placed by top-left at the game's resolution. `level --screens`
   draws it, `check` lints it, and `addPixelforgeHud` builds the same thing in the game (see Phaser usage):
   ```json
@@ -137,7 +138,7 @@ A tileset is a sprite folder with `"type": "tileset"`. Its frames are tiles inst
 
 ## Levels
 A level is `levels/<name>.json` (next to `sprites/`): the map as rows of characters, like a tileset's sample.
-`new-level NAME [--size 40x12] [--tileset terrain]` starts one screen of ground with a spawn.
+`new-level NAME [--size 40x12] [--tileset terrain] [--player hero]` starts one screen of ground with a spawn.
 ```json
 {"name": "village", "view": "topdown", "tileset": "terrain",
  "background": {"color": "#3e8948"},                      // or {"gradient": ["#124e89", "#0099db"]} (top, bottom)
@@ -221,7 +222,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | | |
 |---|---|
 | `list` | sprites + animations, and levels |
-| `new-level NAME [--size WxH] [--tileset T]` | scaffold `levels/NAME.json`: one screen of ground and a spawn |
+| `new-level NAME [--size WxH] [--tileset T] [--player P]` | scaffold `levels/NAME.json`: one screen of ground and a spawn, played as the first character drawn for the view |
 | `level NAME [--screens \| --at X,Y]` | the whole level as the game draws it (screen grid, labels), or every screen the player sees with the HUD, or one screen centred on a tile → `previews/` |
 | `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
 | `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
@@ -240,6 +241,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `import PNG NAME [--cell 32x32]` | PNG/sheet/atlas → frames (reuses existing palette keys) |
 | `export [S...] [--all]` | sheet + JSON + Phaser helper (refuses if `check` has errors) |
 | `gallery` | `export/gallery.html`: one self-contained page with every character playing every animation |
+| `game [--force]` | scaffold a Phaser + Vite game around this folder (`src/`, `index.html`, `package.json`); see Building the game |
 | `upgrade [--dry-run]` | after the pixelforge repo is updated (`git pull`): refresh this guide, add missing scaffolding, re-export. If it writes `CLAUDE.pixelforge-new.md`, merge that into CLAUDE.md and delete it |
 | `--version` | installed pixelforge version (`pixelforge.json` records the version this game was last upgraded to) |
 | `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every level, sprite and tileset, built live from `levels/` and `sprites/` (no export needed), where the developer critiques the art. A level has a "Play" tab; each other asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/platformer.html` playable side-view for characters with `jump*` animations, `/viewer/tilemap.html` walkable sample map) |
@@ -364,3 +366,40 @@ hero.on('pixelforge-land', () => this.cameras.main.shake(60, 0.002));   // also 
   Set `hero.controller.override = {right: true, run: true}` to drive it from code (cutscenes, playtests).
   `null` hands control back to the keyboard.
 - `hero.controller.state()` returns `{x, y, vx, vy, onGround, facing, anim}`.
+- `hero.controller.stun(200)` leaves the body to physics for 200 ms (no input, no velocity changes): set a
+  knockback velocity right after it.
+- `installPixelforgePlay(this, level)` in the level scene's create (the starter and the dashboard's Play tab do it)
+  puts `window.pixelforgePlay` on the page, which drives the game frame by frame:
+  `pixelforgePlay.step(500, {right: true})` holds keys for 500 ms of game time and returns the state,
+  `state()` gives `{level, x, y, vx, vy, onGround, facing, anim, ..., events}` (triggers, jumps, lands, attacks, hits
+  and falls since the last call), and `release()` goes back to real time and the keyboard. Tweens step with it.
+
+## Building the game
+`pixelforge game` (in this folder) scaffolds a Phaser + Vite game around the art. Then `npm install && npm run dev`
+runs it at `http://localhost:5173`. `pixelforge serve` stays the art dashboard, which you run alongside it.
+```
+index.html, vite.config.js, package.json   Vite serves export/ as the site root: the game loads /index.json, /knight.png...
+src/main.js            the Phaser config from pixelforge.json: resolution, "zoom" (default 3), Arcade physics
+src/scenes/Boot.js     loadPixelforgeAll + a progress bar; starts ?level=NAME, else "start", else the first level
+src/scenes/Level.js    one scene for every level: pixelforgeLevel, then doors, items, chests, enemies, damage, death
+src/scenes/Hud.js      HUD_BINDINGS: which pixelforge.json "hud" item (by id) shows which part of the state
+src/game.js            state that survives level changes (health, coins, inventory) + a `bus` of change events
+src/objects/Walker.js  the example enemy: patrols, turns at walls and ledges, hurts on touch, dies to attacks
+```
+- These files are the game's own code: edit them freely. `upgrade` never touches them, and running `game` again only
+  adds missing files (`--force` replaces them). What they share with the dashboard and the playtests (the loader,
+  the player, levels, the HUD, `window.pixelforgePlay`) lives in `export/pixelforge.js`, which `export` refreshes.
+- **The game reads `export/`, not `sprites/` or `levels/`.** Run `pixelforge export` after changing art or a level,
+  then reload the page.
+- **Enemies and other actors:** give the level object a `"type"` (`{"sprite": "slime", "type": "enemy",
+  "props": {"hp": 3}}`), write a class in `src/objects/` taking `(scene, sprite, level)` with `update(time)` (and
+  `hit(from)` if the player's attack can hurt it), and add it to `TYPES` in `Level.js`. The sprite's `pixelforgeObject`
+  holds the level object, including its `props`. Copy `Walker.js` to start.
+- **Items:** objects with `"type": "item"` or `"coin"` are picked up on touch. `props.loot` names what you get:
+  `"coin"` adds a coin, anything else goes into `state.inventory`. `"type": "chest"` props open on touch (they play
+  their `opening` or `open` state) and give their `props.loot`. Read the inventory with `hasItem('key')` from
+  `src/game.js`, e.g. to lock a door.
+- **Doors:** `{"type": "door", "to": "inn", "spawn": "front"}` restarts the level scene in `inn`, at the spawn object
+  named `front` (or `@`). The state in `game.js` carries over; the level's own objects reset.
+- **Dev only:** press B for the hit/hurt boxes. `window.pixelforgeGame` is the Phaser game. `npm run build` writes a
+  static `dist/` you can host anywhere.
