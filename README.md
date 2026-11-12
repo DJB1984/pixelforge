@@ -9,6 +9,12 @@ pip install -e "C:\Users\davis\dev\claude projects\pixel_art"
 This gives you `python -m pixelforge` everywhere, and a `pixelforge` command if Python's user Scripts folder is on your PATH.
 Editable install: changes to this repo apply to every game straight away.
 
+For `pixelforge play` (Claude playtests levels in a headless browser), add the optional extra once:
+```
+pip install -e "C:\Users\davis\dev\claude projects\pixel_art[play]"
+playwright install chromium
+```
+
 ## Per game
 ```
 cd my-game/art

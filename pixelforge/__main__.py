@@ -130,6 +130,27 @@ def cmd_level(args):
     print(_rel(out))
 
 
+def cmd_play(args):
+    from . import playtest as pt
+    try:
+        every = None if args.shot_every in ("0", "off", "none") else pt.parse_duration(args.shot_every) * pt.FRAME_MS
+        run, sheet = pt.play(args.level, pt.read_script(args.script), url=args.url, shot_every_ms=every,
+                             headed=args.headed)
+    except (pt.ScriptError, pt.PlayUnavailable, RuntimeError) as e:
+        sys.exit(str(e))
+    except SpriteError as e:
+        sys.exit(f"error: {e}")
+    lv = lvl.Level.load(args.level)
+    end = run.trace[-1] if run.trace else {}
+    print(f"played {args.level} for {end.get('t', 0) / 1000:.2f}s ({lv.view} view): ended at {pt.describe(end, lv.view)}")
+    for n in pt.notes(run, lv.pixel_size):
+        print(f"  {n}")
+    shots = _previews() / f"play_{args.level}"
+    print(f"{_rel(sheet)}  (route + {len(run.shots)} shots)   frames and log.json: {_rel(shots)}/")
+    if pt.failed(run):
+        sys.exit(1)
+
+
 def cmd_new(args):
     path = sprites_dir() / args.name
     if path.exists():
@@ -772,6 +793,17 @@ def main(argv=None):
     g.add_argument("--screens", action="store_true", help="every camera-sized screen at 1x and 2x, numbered")
     g.add_argument("--at", metavar="X,Y", help="one screen centred on this tile")
     q.set_defaults(fn=cmd_level)
+
+    q = sub.add_parser("play", help="playtest a level in headless Chromium: a script of held keys -> "
+                                    "screenshots, a contact sheet with the route, notes and expectations")
+    q.add_argument("level")
+    q.add_argument("--script", help='actions, one per line or ";": "right+run 2s; jump; expect onGround" '
+                                    "(or a file of them; default: wait 1s)")
+    q.add_argument("--url", help="drive a running game instead of the dashboard's play page, e.g. "
+                                 "http://localhost:5173 (npm run dev)")
+    q.add_argument("--shot-every", default="250ms", help="screenshot interval (default 250ms; 0: only `shot` lines)")
+    q.add_argument("--headed", action="store_true", help="show the browser window")
+    q.set_defaults(fn=cmd_play)
 
     q = sub.add_parser("new", help="scaffold a sprite")
     q.add_argument("name")

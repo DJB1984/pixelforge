@@ -46,7 +46,8 @@ $('level').innerHTML = levels.map((n) => `<option ${n === first ? 'selected' : '
 $('level').onchange = () => { params.set('level', $('level').value); location.search = params; };
 const [RW, RH] = project.resolution ?? [320, 180];
 // embedded in the dashboard: the biggest whole zoom that fits the frame (never more than the game's)
-const ZOOM = params.has('embed')
+const ZOOM = params.has('zoom') ? Math.max(1, Math.round(+params.get('zoom')) || 1)
+  : params.has('embed')
   ? Math.max(1, Math.min(project.zoom ?? 3, Math.floor((innerWidth - 32) / RW), Math.floor((innerHeight - 48) / RH)))
   : project.zoom ?? 3;
 const HELP = {
@@ -63,7 +64,8 @@ class PlayScene extends Phaser.Scene {
     createPixelforgeAll(this);
     this.level = pixelforgeLevel(this, this.levelName, { spawn: this.spawn });
     window.pixelforgeHud = addPixelforgeHud(this);   // pixelforge.json "hud", in its own scene
-    installPixelforgePlay(this, this.level);         // window.pixelforgePlay, for `pixelforge play`
+    const play = installPixelforgePlay(this, this.level);   // window.pixelforgePlay, for `pixelforge play`
+    if (params.has('test')) play.freeze();   // a playtest steps every frame itself, from the first one
     $('help').innerHTML = HELP[this.level.info.view] ?? '';
     const onTrigger = (o) => {
       if (o.type === 'door' && o.to && levels.includes(o.to) && !params.has('test')) {

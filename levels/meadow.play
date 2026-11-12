@@ -1,0 +1,13 @@
+# The route through meadow, for `pixelforge play meadow --script levels/meadow.play`
+right+run 1.8s
+right+run+jump          # over the first pit
+right+run 600ms
+expect x > 360
+expect no fell
+right+run 650ms
+right+run+jump          # over the second pit
+right+run 500ms
+right+run+jump          # up onto the high ground
+right+run 1.8s
+expect trigger door
+expect onGround

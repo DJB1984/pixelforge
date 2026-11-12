@@ -8,7 +8,9 @@ That copies the guide below into the game as its CLAUDE.md.
 `pixelforge/grid.py` (Grid ops) · `model.py` (project root discovery, sprite.json loading, frame resolution) ·
 `render.py` · `validate.py` · `export.py` · `importer.py` · `gallery.py` · `__main__.py` (CLI) ·
 `level.py` (levels/<name>.json: legend, autotiling, stamps, objects, Tiled map export; lint in `validate.check_level`) ·
-`screens.py` (`level` command: a level composited like the game, its screens, the pixelforge.json "hud" mock).
+`screens.py` (`level` command: a level composited like the game, its screens, the pixelforge.json "hud" mock) ·
+`playtest.py` (`play`: script parser, runs it in headless Chromium through `window.pixelforgePlay` via Playwright
+(the optional `[play]` extra), notes, contact sheet; tests use a fake driver, the browser test skips without Playwright).
 Dashboard: `server.py` (`serve`: live builds from sprites/, `/api/project`, `/api/state`, critique API) ·
 `critiques.py` (critiques.json store, targets, `watch` hand-off to Claude, `show` pictures) ·
 `assets/viewer/index.html` + `app.js` + `app.css` (no build step). Its product brief is PRODUCT.md, its look DESIGN.md.

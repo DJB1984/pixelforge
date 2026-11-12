@@ -191,6 +191,7 @@ A level is `levels/<name>.json` (next to `sprites/`): the map as rows of charact
     (as `context` measures it) and the objects in view. Read the PNG and check that the play area reads at 1x, the
     HUD doesn't sit on anything important, the accents stay quieter than the ground, and every screen has
     something to look at.
+  - Then play it (see Playtest every level change).
 - In the dashboard (`serve`), **Levels** come first: the level with its screens, a Screen stepper and the objects
   (click one to find it). The developer marks spots on it for you (see Critiques). Its **Play** tab runs
   `/viewer/play.html?level=NAME` (live from `levels/`, with the HUD). Doors lead to their level.
@@ -205,6 +206,52 @@ A level is `levels/<name>.json` (next to `sprites/`): the map as rows of charact
   the controller), and `respawn: false` (a side-view fall emits `pixelforge-fell` and goes back to the spawn
   unless you set it).
 - Tiled wangsets (Tiled's own autotiling) aren't exported yet.
+
+## Playtest every level change
+You can't play the game yourself, but `pixelforge play` can. It holds keys in headless Chromium, takes screenshots
+and checks what you expect, so a level can be played, not only looked at. Do this after every level change:
+`level NAME --screens` (does it look right?) → `play NAME --script "..."` along the route the player should take
+(can it be played?) → Read the contact sheet → fix → play again.
+```
+pixelforge play meadow --script "right+run 1.8s; right+run+jump; right+run 600ms; expect x > 360; expect no fell"
+```
+- The script has one action per line or `;`, and `#` starts a comment. `--script` also takes a file, e.g.
+  `levels/meadow.play` next to the level, so the route can be replayed after every change.
+  - **Hold keys** for a time: `right 1.5s`, `left+run 800ms`, `up 400ms`. The keys are `left right up down jump
+    run attack`, joined with `+`.
+  - **Press** with no time: `jump` or `right+run+jump` holds until the top of the jump (a full jump), and
+    `attack` is one frame. Then the keys are let go for a frame. A bare `jump` has no sideways input, so the
+    player jumps straight up: to clear a gap, hold the direction in the same press.
+  - `wait 1s` holds nothing. `shot` takes an extra screenshot.
+  - `expect` checks the state at that point:
+    - `expect onGround`, `expect not onGround`;
+    - `expect x > 360` (also `y vx vy facing anim level`, and fields the game adds, like `health`);
+    - `expect anim == princess_run`, `expect inventory has key`;
+    - `expect trigger door` (an event so far: `trigger hit jump land attack fell`, matched by the object's
+      name, type or `to`), `expect no fell`.
+- Runs are the same every time: the game is frozen and stepped one 60 fps frame at a time. So when a jump falls
+  short, change the script (jump earlier, hold run) or the level (narrow the gap), and the next run shows exactly
+  what changed.
+- Output:
+  - `previews/play_<level>.png`, the contact sheet. At the top is the level with the route drawn on it (yellow),
+    the shot numbers, the jumps, landings, triggers and falls, and the door and trigger areas. Under it are the
+    shots, each with its time, the player's position, animation and ground contact, what happened since the last
+    shot, and the expects checked there (green ok, red FAILED).
+  - `previews/play_<level>/NN.png`: each shot at the game's resolution.
+  - `log.json`: every 100 ms of state, the events, the expects and the notes.
+- It prints notes:
+  - stuck (movement held 1s+ without moving 2px), fell out of the world, never landed, left the level;
+  - health lost (when the game reports `health`), triggers fired, hits;
+  - every expect, passed or FAILED.
+  The exit code is 1 when an expect fails or the page threw an error.
+- `--shot-every 500ms` thins the shots (default 250ms; `0` keeps only the `shot` lines). `--headed` shows the
+  browser.
+- By default it plays the dashboard's play page (it starts its own server, no `serve` needed). In test mode, doors
+  fire `trigger` but don't change the level.
+- `--url http://localhost:5173` drives the real game (`npm run dev`) through the same hook. There, doors load
+  their level, and the starter reports `health`, `coins` and `inventory` too.
+- It needs Playwright, once per machine: `pip install -e "<pixelforge folder>[play]"`, then
+  `playwright install chromium`. The page loads Phaser from cdn.jsdelivr.net, so the machine must be online.
 
 ## Hurtboxes and hitboxes
 Boxes are computed from the art on export, so nobody draws them by hand:
@@ -224,6 +271,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `list` | sprites + animations, and levels |
 | `new-level NAME [--size WxH] [--tileset T] [--player P]` | scaffold `levels/NAME.json`: one screen of ground and a spawn, played as the first character drawn for the view |
 | `level NAME [--screens \| --at X,Y]` | the whole level as the game draws it (screen grid, labels), or every screen the player sees with the HUD, or one screen centred on a tile → `previews/` |
+| `play NAME --script "right+run 2s; right+jump; expect onGround" [--url URL] [--shot-every 250ms]` | playtest a level in headless Chromium: held keys, screenshots, a contact sheet with the route, notes (stuck, fell, never landed, triggers), and `expect` checks (exit 1 on failure) → `previews/play_NAME.png` |
 | `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
 | `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
 | `resize S WxH` / `resize S --class C` | re-canvas every frame, keeping the character on its origin |

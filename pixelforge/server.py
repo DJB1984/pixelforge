@@ -243,8 +243,10 @@ def state_data() -> dict:
 
 # ---- HTTP ---------------------------------------------------------------------------------
 class Handler(http.server.SimpleHTTPRequestHandler):
+    quiet = False
+
     def log_message(self, fmt, *args):   # the dashboard polls; keep the terminal readable
-        if not self.path.startswith(("/api/state", "/live/")):
+        if not self.quiet and not self.path.startswith(("/api/state", "/live/")):
             super().log_message(fmt, *args)
 
     def _json(self, obj, status: int = 200) -> None:
@@ -368,9 +370,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+def make_server(port: int, quiet: bool = False) -> http.server.ThreadingHTTPServer:
+    """The dashboard's server, not started (port 0: any free port; `pixelforge play` runs one, quiet, in a
+    thread)."""
+    cls = type("QuietHandler", (Handler,), {"quiet": True}) if quiet else Handler
+    handler = lambda *a, **kw: cls(*a, directory=str(root()), **kw)  # noqa: E731
+    return http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+
+
 def serve(port: int) -> None:
-    handler = lambda *a, **kw: Handler(*a, directory=str(root()), **kw)  # noqa: E731
-    with http.server.ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
+    with make_server(port) as httpd:
         print(f"pixelforge dashboard: http://127.0.0.1:{port}/   ({root()})")
         print("Ctrl+C to stop")
         httpd.serve_forever()

@@ -256,7 +256,7 @@ open the level in the dashboard, pin a critique on a spot, and play it.
 ---
 
 ## Phase 5: Playtesting by Claude (`pixelforge play`)
-- [ ] Add an optional dependency in `pyproject.toml`:
+- [x] Add an optional dependency in `pyproject.toml`:
   `[project.optional-dependencies] play = ["playwright>=1.40"]`. When it's missing, the command explains
   `pip install -e ".[play]" && playwright install chromium`.
 - [x] Add `window.pixelforgePlay` to `play.html` and the starter's Level scene (done in Phase 4 as
@@ -266,7 +266,7 @@ open the level in the dashboard, pin a critique on a spot, and play it.
   - `step(ms, input)` sets `player.controller.override` and advances frames;
   - `state()` → `{x, y, vx, vy, onGround, facing, anim, health?, events: [...]}`, where events are triggers,
     hits, lands and attacks since the last call.
-- [ ] `pixelforge play LEVEL [--script FILE|"..."] [--url URL] [--shot-every 250ms]`:
+- [x] `pixelforge play LEVEL [--script FILE|"..."] [--url URL] [--shot-every 250ms]`:
   - With no `--url`, it starts the dashboard server in a thread on a free port and opens `play.html?level=..&test=1`
     in headless Chromium (Playwright). The script language has one action per line or `;`:
     `right 1.5s`, `right+run 800ms`, `jump`, `right+jump 300ms`, `wait 1s`, `attack`, `shot`,
@@ -276,9 +276,16 @@ open the level in the dashboard, pin a critique on a spot, and play it.
   - It prints a summary with notes: stuck (input held for 1s and no movement), fell out of the world, never
     landed, expectations passed/failed (exit code 1 on failure), and triggers fired.
   - With `--url http://localhost:5173`, it drives the real game through the same hook.
-- [ ] Tests: script parser unit tests; summary-note logic on a canned log; an integration test that runs `meadow`
+  - (Done as `pixelforge/playtest.py`. A bare `jump` (no time) is a full jump: held until it stops rising, with no
+    sideways input, so the done-when script below jumps in place at the pit's edge and falls in. The passing
+    version is `right+run 1.8s; right+run+jump; right+run 600ms; expect x > 360`, and the whole route is
+    `levels/meadow.play`. Also: the contact sheet starts with the route drawn on the level (shots, events, door
+    areas); `play.html` takes `?zoom=` and freezes from the first frame with `test=1`, so runs are identical;
+    health drops are noted when the game reports `health`; `--headed`; expects also take `has` and
+    `no <event>`. Checked against the Phase 4 Vite starter with `--url`.)
+- [x] Tests: script parser unit tests; summary-note logic on a canned log; an integration test that runs `meadow`
   for 2s, skipped unless Playwright is installed.
-- [ ] Guide: "Playtest every level change": the loop is `level --screens` → `play` with a script that walks the
+- [x] Guide: "Playtest every level change": the loop is `level --screens` → `play` with a script that walks the
   intended route → read the contact sheet → fix.
 
 **Done when** `pixelforge play meadow --script "right+run 2s; jump; right 1s; shot"` produces a contact sheet
