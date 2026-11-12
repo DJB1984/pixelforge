@@ -325,3 +325,48 @@ function mockSprite(scene, x, y, name) {
     [49, 49, 0.785, 'o_walk']);
   check('state() for playtests', p.controller.state(), { x: 0, y: 0, vx: 49.5, vy: 49.5, onGround: true, facing: 45, anim: 'o_walk' });
 }
+
+// ---- the HUD: its own scene, items from the index, set() before and after it starts ----------------
+import { addPixelforgeHud, PIXELFORGE_HUD } from '../pixelforge/assets/phaser/pixelforge.js';
+{
+  const made = [];
+  const obj = (kind, x, y, extra = {}) => {
+    const o = { kind, x, y, visible: true, origin: null, tint: null, ...extra,
+                setOrigin(a, b) { this.origin = [a, b]; return this; }, setVisible(v) { this.visible = v; return this; },
+                setTint(t) { this.tint = t; return this; }, setText(t) { this.text = t; return this; } };
+    made.push(o);
+    return o;
+  };
+  const hudScene = {
+    textures: { getFrame: () => ({ width: 16 }) },
+    cache: { json: { get: (k) => (k === 'ui' ? { meta: { pixelforge: { nine: { panel: [2, 2, 2, 2] } } } } : null) } },
+    add: { image: (x, y, s, f) => obj('image', x, y, { frame: f }), bitmapText: (x, y, f, t) => obj('text', x, y, { text: t }),
+           nineslice: (x, y, s, f, w, h) => obj('panel', x, y, { w, h }) },
+  };
+  const scenes = {};
+  const calls = [];
+  const plugin = {
+    get: (k) => scenes[k] ?? null,
+    add: (k, config, start, data) => { calls.push(['add', k, start]); scenes[k] = config; config.create.call(hudScene, data); },
+    launch: (k, data) => { calls.push(['launch', k]); scenes[k].create.call(hudScene, data); },
+    bringToTop: (k) => calls.push(['top', k]),
+  };
+  const index = { hud: [{ id: 'hearts', icon: 'ui:heart', at: [4, 4], repeat: 3, step: 10 },
+                        { id: 'gold', text: 'font:GOLD 1', at: [4, 18], tint: '#ff0000' },
+                        { panel: 'ui:panel', at: [0, 140], size: [320, 40] }] };
+  const game = { scene: plugin, cache: { json: { get: (k) => (k === 'pixelforge-index' ? index : null) } } };
+  const hud = addPixelforgeHud(game);
+  check('hud: its own scene, on top', calls, [['add', PIXELFORGE_HUD, true], ['top', PIXELFORGE_HUD]]);
+  check('hud: hearts repeat by step, top-left origin', made.filter((o) => o.kind === 'image').map((o) => [o.x, o.y, o.origin]),
+    [[4, 4, [0, 0]], [14, 4, [0, 0]], [24, 4, [0, 0]]]);
+  check('hud: tinted text, stretched panel', [made[3].tint, made[4].w, made[4].h, made[4].origin], [0xff0000, 320, 40, [0, 0]]);
+  hud.set('hearts', 1); hud.set('gold', 'GOLD 9');
+  check('hud: set() shows n icons and changes text', [hud.items.hearts.map((o) => o.visible), hud.items.gold.text],
+    [[true, false, false], 'GOLD 9']);
+  made.length = 0;
+  const again = addPixelforgeHud(game, [{ id: 'hp', icon: 'ui:heart', repeat: 2 }]);
+  check('hud: calling it again relaunches the scene', calls.slice(-2), [['launch', PIXELFORGE_HUD], ['top', PIXELFORGE_HUD]]);
+  check('hud: default step is the icon width + 2', made.map((o) => o.x), [0, 18]);
+  again.set('hp', 0);
+  check('hud: set(0) hides them all', again.items.hp.map((o) => o.visible), [false, false]);
+}

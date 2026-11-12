@@ -32,6 +32,13 @@ previews/                     generated: renders, sheets, GIFs (gitignored)
 `pixelforge.json` says how the game looks, and `new`, `check` and the Phaser helper follow it:
 - `"view"`: `"side"` (platformers), `"topdown"` (3/4 view RPGs) or `"overhead"` (bird's-eye). It picks `new`'s default class, a prop's default footprint and whether props y-sort. One sprite can override it with its own `"view"`.
 - `"resolution"`: the game's screen before scaling, e.g. `[320, 180]`. `check` warns when a prop is bigger than the screen.
+- `"hud"` (optional): what's drawn over every screen, placed by top-left at the game's resolution. `level --screens`
+  draws it, `check` lints it, and `addPixelforgeHud` builds the same thing in the game (see Phaser usage):
+  ```json
+  "hud": [{"id": "hearts", "icon": "ui:heart", "at": [4, 4], "repeat": 3, "step": 14},
+          {"id": "gold", "text": "font:GOLD 120", "at": [4, 20], "tint": "#ffffff"},
+          {"panel": "ui:panel", "at": [0, 140], "size": [320, 40]}]
+  ```
 
 ## Big art: build it from parts
 Text grids stay accurate up to about 64px. Past that, long lines, perspective and repeated details drift. So never draw a 100px+ canvas as one hand-written grid:
@@ -173,7 +180,19 @@ A level is `levels/<name>.json` (next to `sprites/`): the map as rows of charact
     with `props` that can't be walked to from the spawn. Side-view routes need a playtest.
 - `export` writes `export/levels/<name>.json`: a Tiled map with the tilesets embedded and an `objects` group (open it
   in Tiled). `list` shows the levels.
-- Play a level in the dashboard's `/viewer/play.html?level=NAME` (live from `levels/`). Doors lead to their level.
+- **Look at whole screens, not just the sprites.** A level is judged by what the player sees:
+  - `level NAME` → `previews/level_<name>.png`: the whole level composited like the game (sky, parallax accents,
+    tile layers, objects sorted by their base, `above` layers) with the screen grid, screen numbers and object labels.
+    A long level is cut into strips at 2x.
+  - `level NAME --screens`: every camera-sized screen at 1x and 2x with the HUD on top. `--at X,Y`: one screen
+    centred on a tile.
+  - Both print, per screen, the colors on it (not counting the sky), the player's contrast against what's behind it
+    (as `context` measures it) and the objects in view. Read the PNG and check that the play area reads at 1x, the
+    HUD doesn't sit on anything important, the accents stay quieter than the ground, and every screen has
+    something to look at.
+- In the dashboard (`serve`), **Levels** come first: the level with its screens, a Screen stepper and the objects
+  (click one to find it). The developer marks spots on it for you (see Critiques). Its **Play** tab runs
+  `/viewer/play.html?level=NAME` (live from `levels/`, with the HUD). Doors lead to their level.
 - In Phaser, `loadPixelforgeAll` loads the levels, and `pixelforgeLevel` builds one:
   ```js
   const level = pixelforgeLevel(this, 'village');   // { map, layers, player, objects, props, sprites, spawns, triggers }
@@ -203,6 +222,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 |---|---|
 | `list` | sprites + animations, and levels |
 | `new-level NAME [--size WxH] [--tileset T]` | scaffold `levels/NAME.json`: one screen of ground and a spawn |
+| `level NAME [--screens \| --at X,Y]` | the whole level as the game draws it (screen grid, labels), or every screen the player sees with the HUD, or one screen centred on a tile → `previews/` |
 | `new NAME [--class C]` | scaffold a character (class defaults from the view; or `--size WxH`). `--prop`, `--building`, `--tileset`, `--icons`, `--font` for the other kinds |
 | `tiles S [TILE...]` | tileset preview: each tile repeated 3×3 (seams show), the sample map and stamps; for icons, nine-slices stretched; for a font, its glyphs and sample text (`tiles FONT "ANY TEXT"`) → `previews/` |
 | `resize S WxH` / `resize S --class C` | re-canvas every frame, keeping the character on its origin |
@@ -222,7 +242,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 | `gallery` | `export/gallery.html`: one self-contained page with every character playing every animation |
 | `upgrade [--dry-run]` | after the pixelforge repo is updated (`git pull`): refresh this guide, add missing scaffolding, re-export. If it writes `CLAUDE.pixelforge-new.md`, merge that into CLAUDE.md and delete it |
 | `--version` | installed pixelforge version (`pixelforge.json` records the version this game was last upgraded to) |
-| `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every sprite and tileset, built live from `sprites/` (no export needed), where the developer critiques the art. Each asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/platformer.html` playable side-view for characters with `jump*` animations, `/viewer/tilemap.html` walkable sample map) |
+| `serve [--port 8000]` | the dashboard at `http://127.0.0.1:8000/`: every level, sprite and tileset, built live from `levels/` and `sprites/` (no export needed), where the developer critiques the art. A level has a "Play" tab; each other asset has an "In game" tab (`/viewer/phaser.html` sparring, `/viewer/platformer.html` playable side-view for characters with `jump*` animations, `/viewer/tilemap.html` walkable sample map) |
 | `critiques [--all]` / `critiques watch [--once]` / `critiques show ID` / `critiques done ID -m "..."` | the developer's critiques: list them, wait for new ones, picture one (`previews/critique_ID.png`), mark one fixed |
 
 ## The authoring loop (do this every time)
@@ -237,6 +257,7 @@ Boxes are computed from the art on export, so nobody draws them by hand:
 
 ## Critiques from the dashboard
 The developer reviews the art in `serve`'s dashboard and leaves critiques on a whole sprite or tileset, an animation, a frame or tile, or a spot they marked on it. A spot is `[x, y, w, h]` in frame pixels: the same coordinates as `show` and the boxes.
+On a level, a spot is in level pixels (column × tile width), and `critiques show` names the rows and columns of `levels/<name>.json` under it, the tiles on each layer and the objects there. Fix the level file, then check it with `level NAME --at X,Y`.
 - When the developer asks you to watch for critiques, run `pixelforge critiques watch --once` in the background. It returns as soon as there are critiques, prints one line each, and marks them `working` so the dashboard shows you're on it. (With the Monitor tool, `pixelforge critiques watch` streams one line per new critique instead.)
 - For each critique: `pixelforge critiques show ID`, then Read the PNG it prints (the spot is outlined in cyan) and fix the art with the normal authoring loop (check, render, look). Then run `pixelforge critiques done ID -m "what you changed"`. That marks it fixed, shows your note in the dashboard, and re-exports the sprite. Keep the note to one plain sentence about the change.
 - Then start `watch --once` again, so you keep watching until the developer says stop.
@@ -319,6 +340,9 @@ create()  {
 - A sliced building is also a tileset: `loadPixelforgeTiles(this, 'house_tiles')`, then `stampPixelforgeTiles(layer, 'house_tiles', 'house', tx, ty, { above })`, or paint it in Tiled.
 - `/viewer/tilemap.html?prop=house` (a top-down prop's "In game" tab) stands the prop on a tileset's sample map, so you can walk around it, into its footprint and behind its roof.
 - For top-down characters, collide with the feet only: `hero.body.setSize(b.width - 4, 8).setOffset(b.x + 2, b.y + b.height - 8)` with `b = pixelforgeBody(...)`, so the head can overlap the top of a wall. `addPixelforgePlayer` does this for you.
+- The HUD from `pixelforge.json` (export/index.json carries it): `const hud = addPixelforgeHud(this)` in create runs it
+  as its own scene on top (zoom 1, never scrolls; calling it again, e.g. after a level restart, rebuilds it). Items
+  with an `"id"` update with `hud.set('hearts', 2)` (shows 2 of a repeated icon) or `hud.set('gold', 'GOLD 130')`.
 
 ## Phaser: the player
 Don't write a movement controller. `addPixelforgePlayer` is the one the dashboard, the playtests and the game

@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 from .boxes import anim_boxes
-from .model import Sprite, root
+from .model import Sprite, project_config, root
 from .render import to_image
 
 
@@ -313,6 +313,8 @@ def write_index(out_dir: Path | None = None) -> Path:
             continue
         found[index_group(data)].append(js.stem)
     found["levels"] = sorted(p.stem for p in (out / "levels").glob("*.json"))
+    if project_config().get("hud"):   # the HUD mock, for addPixelforgeHud
+        found["hud"] = project_config()["hud"]
     p = out / "index.json"
     p.write_text(json.dumps(found, indent=2) + "\n", encoding="utf-8")
     return p

@@ -86,6 +86,13 @@
   .mapview { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
              display: grid; gap: 8px; justify-items: start; overflow-x: auto; }
 
+  .levelview { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+               display: grid; gap: 10px; min-width: 0; }
+  .levelview .whole { overflow-x: auto; }
+  .levelview img { image-rendering: pixelated; display: block; border-radius: 6px; }
+  .levelview .screens { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .levelview figure { margin: 0; display: grid; gap: 4px; flex: none; font: 12px var(--mono); color: var(--muted); }
+
   footer { color: var(--muted); font-size: 13px; padding-block: 0 40px; display: grid; gap: 8px; }
   footer pre { font: 12px/1.6 var(--mono); background: var(--surface); border: 1px solid var(--line);
                border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0; color: var(--ink); }
@@ -286,8 +293,22 @@ function segmented(id, values, current, onPick) {
   }
 }
 
+// a level: the whole thing (2x when it fits), then each screen as the player sees it, HUD and all
+function buildLevel(lv) {
+  const sec = document.createElement('section');
+  sec.className = 'char';
+  sec.id = lv.name;
+  const z = lv.w * 2 <= 1146 ? 2 : 1;
+  sec.innerHTML = `<div class="char-head"><h2>${lv.name}</h2>
+    <span class="meta">level · ${lv.view} · ${lv.cells[0]}×${lv.cells[1]} tiles (${lv.w}×${lv.h} px) · ${lv.objects} objects · ${lv.screens.length} screens</span></div>
+    <div class="levelview"><div class="whole"><img src="${lv.image}" width="${lv.w * z}" height="${lv.h * z}" alt="The whole ${lv.name} level"></div>
+      <div class="tile-head"><strong>Screens</strong><span class="badge">what the camera shows</span></div>
+      <div class="screens">${lv.screens.map((src, i) => `<figure><img src="${src}" alt="${lv.name} screen ${i + 1}">Screen ${i + 1}</figure>`).join('')}</div></div>`;
+  return sec;
+}
+
 async function init() {
-  const sprites = DATA.sprites, tilesets = DATA.tilesets ?? [];
+  const sprites = DATA.sprites, tilesets = DATA.tilesets ?? [], levels = DATA.levels ?? [];
   const animCount = sprites.reduce((a, s) => a + s.anims.length, 0);
   const frameCount = sprites.reduce((a, s) => a + s.anims.reduce((b, an) => b + an.frames.length, 0), 0);
   const terrains = tilesets.filter((t) => !t.kind || t.kind === 'tileset'), uiSets = tilesets.filter((t) => t.kind && t.kind !== 'tileset');
@@ -295,7 +316,8 @@ async function init() {
   $('game').textContent = DATA.game;
   const nChars = sprites.filter((s) => s.kind !== 'prop').length, nProps = sprites.length - nChars;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  $('summary').textContent = `${plural(nChars, 'character')} · ` + (nProps ? `${plural(nProps, 'prop')} · ` : '') +
+  $('summary').textContent = (levels.length ? `${plural(levels.length, 'level')} · ` : '') +
+    `${plural(nChars, 'character')} · ` + (nProps ? `${plural(nProps, 'prop')} · ` : '') +
     `${animCount} animations · ${frameCount} frames · ` +
     (terrains.length ? `${plural(terrains.length, 'tileset')} · ${tileCount} tiles · ` : '') +
     (uiSets.length ? `${plural(uiSets.length, 'UI set')} · ` : '') +
@@ -303,6 +325,7 @@ async function init() {
 
   await Promise.all([...sprites, ...tilesets].map((s) => { s.img = new Image(); s.img.src = s.sheet; return s.img.decode(); }));
 
+  for (const lv of levels) $('main').append(buildLevel(lv));
   for (const s of sprites) {
     const sec = document.createElement('section');
     sec.className = 'char';
@@ -316,8 +339,8 @@ async function init() {
     $('main').append(sec);
   }
   for (const ts of tilesets) $('main').append(buildTileset(ts));
-  if (sprites.length + tilesets.length > 1) {
-    for (const s of [...sprites, ...tilesets]) {
+  if (levels.length + sprites.length + tilesets.length > 1) {
+    for (const s of [...levels, ...sprites, ...tilesets]) {
       const a = document.createElement('a');
       a.href = `#${s.name}`;
       a.textContent = s.name;

@@ -67,10 +67,12 @@ const S = {
   railFilter: 'active',
   draft: '',
   menu: null,
+  lv: { for: null, screen: 0, obj: null, screens: true },   // the level page: current screen, highlighted object
 };
 let animators = [];
 
 const TYPES = [   // asset types the dashboard knows; new kinds slot in here
+  { type: 'level', label: 'Levels', icon: 'map', noun: 'level' },
   { type: 'sprite', label: 'Sprites', icon: 'box', noun: 'sprite' },
   { type: 'prop', label: 'Props & buildings', icon: 'box', noun: 'prop' },
   { type: 'tileset', label: 'Tilesets', icon: 'tiles', noun: 'tileset', cells: 'tiles' },
@@ -163,7 +165,7 @@ function targetText(t, withAsset = true) {
   if (!withAsset && !p.length) p.push(`whole ${typeInfo(assetOf(t.asset)).noun}`);
   return p.join(' › ');
 }
-const targetIcon = (t) => (t.region ? 'scan' : t.frame != null || t.tile ? 'image' : t.anim ? 'film' : t.map ? 'map' : 'box');
+const targetIcon = (t) => (t.region ? 'scan' : t.level ? 'map' : t.frame != null || t.tile ? 'image' : t.anim ? 'film' : t.map ? 'map' : 'box');
 
 function toast(msg, ico) {
   const el = document.createElement('div');
@@ -389,7 +391,10 @@ function paintThumb(canvas, c) {
   if (!a?.img) return;
   const src = document.createElement('canvas');
   let region = t.region, cw, ch;
-  if (animated(a)) {
+  if (a.type === 'level') {
+    cw = a.w; ch = a.h;
+    sizeCanvas(src, cw, ch).drawImage(a.img, 0, 0);
+  } else if (animated(a)) {
     const anim = a.anims.find((x) => x.name === t.anim) ?? idleOf(a);
     const f = anim.frames[t.frame ?? 0];
     cw = a.w; ch = a.h;
@@ -448,7 +453,12 @@ function paintFit(canvas, a, { anim, fi = 0, tile, t = 0, size, crop = false, bo
   ctx.clearRect(0, 0, D, D);
   if (!a?.img) return;
   let sx, sy, bx = 0, by = 0, bw = a.w, bh = a.h;
-  if (animated(a)) {
+  if (a.type === 'level') {   // a square from the middle of the first screen, what the player sees first
+    const [cx, cy] = a.screens[0] ?? [0, 0];
+    bw = bh = Math.min(a.w, a.h, a.screen[1]);
+    sx = Math.max(0, Math.min(a.w - bw, cx + Math.round((Math.min(a.w, a.screen[0]) - bw) / 2)));
+    sy = Math.max(0, Math.min(a.h - bh, cy));
+  } else if (animated(a)) {
     const f = (anim ?? idleOf(a)).frames[fi];
     sx = f.x; sy = f.y;
     if (box) [bx, by, bw, bh] = box;
@@ -525,7 +535,9 @@ function renderTop() {
   else {
     const a = assetOf(r.name);
     crumbs = `<a href="#/">${typeLabel(a?.type)}</a><span class="sep">/</span><span class="here">${esc(r.name)}</span>`;
-    if (animated(a)) meta = `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}${a.prop ? propChips(a) : ''}<span class="chip num">${a.w}×${a.h}</span>`;
+    if (a?.type === 'level') meta = `<span class="chip">${esc(a.view)}</span><span class="chip num">${a.cells[0]}×${a.cells[1]} tiles</span>` +
+      `<span class="chip num">${a.screens.length} screen${a.screens.length === 1 ? '' : 's'}</span>`;
+    else if (animated(a)) meta = `${a.class ? `<span class="chip">${esc(a.class)}</span>` : ''}${a.prop ? propChips(a) : ''}<span class="chip num">${a.w}×${a.h}</span>`;
     else if (a && a.type !== 'error') meta = `<span class="chip num">${a.tiles.length} ${typeInfo(a).cells}</span><span class="chip num">${a.w}×${a.h}</span>`;
   }
   $('#top').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb">${crumbs}</nav>` +
@@ -619,7 +631,8 @@ function overviewPage(page) {
     for (const a of items) {
       const n = activeCrits((c) => c.target.asset === a.name).length;
       const noun = a.type === 'prop' ? 'state' : 'animation';
-      const sub = animated(a) ? `${a.anims.length} ${noun}${a.anims.length === 1 ? '' : 's'}${a.class ? ` · ${a.class}` : ''}${a.prop ? ` · ${a.prop.layer}` : ''}`
+      const sub = a.type === 'level' ? `${a.cells[0]}×${a.cells[1]} tiles · ${a.view} · ${a.objects.length} object${a.objects.length === 1 ? '' : 's'}`
+        : animated(a) ? `${a.anims.length} ${noun}${a.anims.length === 1 ? '' : 's'}${a.class ? ` · ${a.class}` : ''}${a.prop ? ` · ${a.prop.layer}` : ''}`
         : `${a.tiles.length} ${typeInfo(a).cells} · ${a.w}×${a.h}`;
       html += `<a class="tile" href="#/a/${enc(a.name)}"><div class="art"><canvas data-card="${esc(a.name)}"></canvas></div>
         <div class="info"><div><div class="nm">${esc(a.name)}</div><div class="sub">${esc(sub)}</div></div>
@@ -636,7 +649,11 @@ function overviewPage(page) {
   wireCrits(page);
   for (const c of $$('canvas[data-card]', page)) {
     const a = assetOf(c.dataset.card);
-    if (animated(a)) {
+    if (a.type === 'level') {   // the whole level, fitted into the card
+      const z = Math.min(208 / a.w, 150 / a.h);
+      const s = z >= 1 ? Math.floor(z) : z;
+      sizeCanvas(c, Math.round(a.w * s), Math.round(a.h * s)).drawImage(a.img, 0, 0, Math.round(a.w * s), Math.round(a.h * s));
+    } else if (animated(a)) {
       const anim = idleOf(a);
       const z = Math.max(1, Math.floor(Math.min(208 / a.w, 150 / a.h)));
       const p = { frame: 0, acc: 0 };
@@ -713,7 +730,8 @@ function assetPage(page) {
     return;
   }
   if (a.type === 'error') return errorPage(page, a);
-  if (animated(a)) spritePage(page, a);
+  if (a.type === 'level') levelPage(page, a);
+  else if (animated(a)) spritePage(page, a);
   else tilesetPage(page, a);
 }
 
@@ -936,6 +954,147 @@ function renderTileTabs(a, view) {
     (a.type === 'tileset' ? `<span class="spacer"></span><a class="tab ${view === 'game' ? 'on' : ''}" href="#/a/${enc(a.name)}/~game">${icon('game')}In game</a>` : '');
 }
 
+// level ----------------------------------------------------------------
+// The level as the game composites it (rendered by the server), with the camera-sized screens, the
+// objects, critique spots and the selection drawn over it. Play runs play.html.
+const objBox = (o) => o.rect ?? o.art ?? [o.x - 4, o.y - 8, 8, 8];
+const objLabel = (o) => (o.type === o.name || o.type === 'prop' || o.type === 'sprite' ? o.name : `${o.name} (${o.type})`) + (o.to ? ` → ${o.to}` : '');
+
+function paintLevel(canvas, a, o) {
+  const z = o.zoom, W = a.w * z, H = a.h * z;
+  const ctx = sizeCanvas(canvas, W, H);
+  ctx.drawImage(a.img, 0, 0, W, H);
+  if (o.grid) {
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    for (let x = 0; x <= a.w; x += a.tile[0]) ctx.fillRect(x * z, 0, 1, H);
+    for (let y = 0; y <= a.h; y += a.tile[1]) ctx.fillRect(0, y * z, W, 1);
+  }
+  for (const ob of a.objects) if (ob.rect) {   // doors and triggers: always visible, they're invisible in game
+    const [x, y, w, h] = ob.rect;
+    strokeRect(ctx, x * z, y * z, w * z, h * z, 'rgba(44,232,245,.8)', 1, [4, 3]);
+  }
+  if (S.lv.screens) {
+    const [sw, sh] = a.screen;
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    a.screens.forEach(([x, y], i) => {
+      const cur = i === S.lv.screen;
+      strokeRect(ctx, x * z, y * z, Math.min(sw, a.w - x) * z, Math.min(sh, a.h - y) * z, cur ? '#fff' : 'rgba(255,255,255,.4)', cur ? 2 : 1, cur ? [] : [6, 4]);
+      ctx.fillStyle = 'rgba(13,14,16,.75)';
+      ctx.fillRect(x * z + 4, y * z + 4, 20, 18);
+      ctx.fillStyle = cur ? '#fff' : 'rgba(255,255,255,.7)';
+      ctx.fillText(String(i + 1), x * z + 9, y * z + 18);
+    });
+  }
+  const hi = a.objects[S.lv.obj];
+  if (hi) {
+    const [x, y, w, h] = objBox(hi);
+    strokeRect(ctx, x * z - 2, y * z - 2, w * z + 4, h * z + 4, 'rgba(0,0,0,.75)', 4);
+    strokeRect(ctx, x * z - 1, y * z - 1, w * z + 2, h * z + 2, '#2ce8f5', 2);
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
+    const tag = objLabel(hi), tw = ctx.measureText(tag).width + 8;
+    const ty = y * z - 19 >= 0 ? y * z - 19 : (y + h) * z + 3;
+    ctx.fillStyle = '#2ce8f5';
+    ctx.beginPath(); ctx.roundRect(x * z - 1, ty, tw, 16, 3); ctx.fill();
+    ctx.fillStyle = '#0d0e10';
+    ctx.fillText(tag, x * z + 3, ty + 12);
+  }
+  paintMarks(ctx, z, o.marks ?? [], o.sel, 0, 0, o.ants);
+}
+
+// scroll the stage so level pixels (x, y, w, h) are in view (centred when they fit)
+function revealLevel(x, y, w, h) {
+  const st = $('#stage'), z = S.view.zoom, c = $('#stage-canvas');
+  if (!st || !c) return;
+  const ox = c.offsetLeft, oy = c.offsetTop;
+  st.scrollLeft = ox + (x + w / 2) * z - st.clientWidth / 2;
+  st.scrollTop = oy + (y + h / 2) * z - st.clientHeight / 2;
+}
+
+function levelPage(page, a) {
+  const r = S.route;
+  const view = r.sub === '~game' ? 'game' : 'level';
+  r.view = view;
+  if (view === 'game') {
+    page.innerHTML = gameShell(`play.html?level=${enc(a.name)}&embed=1`);
+    renderLevelTabs(a, view);
+    stage = null;
+    return;
+  }
+  if (S.lv.for !== a.name) S.lv = { ...S.lv, for: a.name, screen: 0, obj: null };
+  S.lv.screen = Math.min(S.lv.screen, a.screens.length - 1);
+  if (S.lv.obj != null && !a.objects[S.lv.obj]) S.lv.obj = null;
+  const key = zoomKey(`${a.name}:level`);
+  page.innerHTML = stageShell(true);
+  $('#stage').classList.add('pan');
+  renderLevelTabs(a, view);
+  const canvas = $('#stage-canvas');
+  let ants = 0;
+  const draw = () => {
+    if (!canvas.isConnected) return;
+    if (!S.view.zoom) S.view.zoom = Math.min(4, fitZoom(a.w, a.h));
+    paintLevel(canvas, a, { zoom: S.view.zoom, grid: S.view.grid, marks: stageMarks((x) => x.level), sel: S.sel, ants });
+    $('#zoom-read').textContent = `${S.view.zoom}×`;
+  };
+  const go = (i) => {
+    S.lv.screen = (i + a.screens.length) % a.screens.length;
+    $('#screen-read').innerHTML = `Screen <b>${S.lv.screen + 1}</b> / ${a.screens.length}`;
+    draw();
+    revealLevel(...a.screens[S.lv.screen], ...a.screen);
+    updateComposer();
+  };
+  stage = { draw, surface: { w: a.w, h: a.h, mapCell: a.tile }, togglePlay() {}, pause() {}, step: (d) => go(S.lv.screen + d), nav() {} };
+  $('#toolbar').innerHTML = `<button class="btn icon" id="prev" title="Previous screen (←)" aria-label="Previous screen">${icon('left')}</button>
+      <span class="readout num" id="screen-read">Screen <b>${S.lv.screen + 1}</b> / ${a.screens.length}</span>
+      <button class="btn icon" id="next" title="Next screen (→)" aria-label="Next screen">${icon('right')}</button><span class="sep"></span>
+    ${zoomControls()}<span class="sep"></span>
+    <button class="btn icon ${S.lv.screens ? 'on' : ''}" id="screensbtn" title="Screens: what one camera position shows (${a.screen[0]}×${a.screen[1]})" aria-pressed="${S.lv.screens}" aria-label="Screens">${icon('grid')}</button>
+    <button class="btn icon ${S.view.grid ? 'on' : ''}" id="gridbtn" title="Tile grid" aria-pressed="${S.view.grid}" aria-label="Tile grid">${icon('tiles')}</button>`;
+  $('#prev').onclick = () => stage.step(-1);
+  $('#next').onclick = () => stage.step(1);
+  wireZoom(() => { draw(); revealLevel(...a.screens[S.lv.screen], ...a.screen); });
+  const toggle = (id, get, set) => { $(id).onclick = (e) => { set(!get()); e.currentTarget.classList.toggle('on', get()); e.currentTarget.setAttribute('aria-pressed', get()); draw(); }; };
+  toggle('#screensbtn', () => S.lv.screens, (v) => { S.lv.screens = v; });
+  toggle('#gridbtn', () => S.view.grid, (v) => { S.view.grid = v; });
+  // the strip: every object, pictured from the level itself; click to highlight (again to clear)
+  $('#strip').innerHTML = (a.errors.length ? `<div class="lv-err" title="${esc(a.errors.join('\n'))}">${icon('alert', 'i-sm')}<span>${a.errors.length} problem${a.errors.length === 1 ? '' : 's'}: ${esc(a.errors[0])}</span></div>` : '') +
+    a.objects.map((o, k) => `<button class="fr ${k === S.lv.obj ? 'on' : ''}" data-obj="${k}" title="${esc(objLabel(o))} at ${o.x}, ${o.y}">
+      <canvas width="96" height="96" style="width:48px;height:48px" data-objc="${k}"></canvas>
+      <span class="lbl"><span>${esc(o.name)}</span></span>${o.type !== o.name && o.type !== 'prop' && o.type !== 'sprite' ? `<span class="type">${esc(o.type)}${o.to ? ` → ${esc(o.to)}` : ''}</span>` : ''}</button>`).join('');
+  for (const c of $$('canvas[data-objc]')) {
+    const o = a.objects[+c.dataset.objc];
+    const [x, y, w, h] = objBox(o);
+    const side = Math.max(w, h, 16) + 8;
+    const sx = Math.round(x + w / 2 - side / 2), sy = Math.round(y + h / 2 - side / 2);
+    const ctx = sizeCanvas(c, 96, 96);
+    ctx.fillStyle = '#0d0e10'; ctx.fillRect(0, 0, 96, 96);
+    ctx.drawImage(a.img, sx, sy, side, side, 0, 0, 96, 96);
+    if (o.rect) strokeRect(ctx, (x - sx) * 96 / side, (y - sy) * 96 / side, w * 96 / side, h * 96 / side, '#2ce8f5', 2, [4, 3]);
+  }
+  for (const b of $$('[data-obj]')) b.onclick = () => {
+    const k = +b.dataset.obj;
+    S.lv.obj = S.lv.obj === k ? null : k;
+    $$('[data-obj]').forEach((x) => x.classList.toggle('on', +x.dataset.obj === S.lv.obj));
+    draw();
+    if (S.lv.obj != null) revealLevel(...objBox(a.objects[k]));
+  };
+  wireSelection(canvas, () => stage.surface);
+  draw();
+  if (S.focus) {   // opened from a critique: show its spot
+    const c = S.crits.find((x) => x.id === S.focus);
+    if (c?.target.region) revealLevel(...c.target.region);
+  } else revealLevel(...a.screens[S.lv.screen], ...a.screen);
+  animators.push((dt, t) => { const k = Math.floor(t / 90); if (S.sel && k !== ants) { ants = k; draw(); } });
+  observeStage(draw, key);
+}
+
+function renderLevelTabs(a, view) {
+  const el = $('#tabs');
+  if (!el) return;
+  const n = activeCrits((c) => c.target.asset === a.name).length;
+  el.innerHTML = `<a class="tab ${view === 'level' ? 'on' : ''}" href="#/a/${enc(a.name)}">${icon('map')}Level${n ? `<span class="badge">${n}</span>` : ''}</a>
+    <span class="spacer"></span><a class="tab ${view === 'game' ? 'on' : ''}" href="#/a/${enc(a.name)}/~game">${icon('game')}Play</a>`;
+}
+
 // stage controls -------------------------------------------------------
 function wireZoom(draw) {
   for (const b of $$('[data-z]')) b.onclick = () => {
@@ -1098,7 +1257,8 @@ function scopesFor() {
   const r = S.route, a = assetOf(r.name);
   if (!a || a.type === 'error' || r.sub === '~game') return [];
   const spot = { id: 'spot', label: 'Spot', icon: 'scan', disabled: !S.sel, title: S.sel ? 'The marked spot' : 'Drag on the art to mark a spot' };
-  const whole = { id: 'asset', label: cap(typeInfo(a).noun), icon: animated(a) ? 'box' : 'tiles' };
+  const whole = { id: 'asset', label: cap(typeInfo(a).noun), icon: a.type === 'level' ? 'map' : animated(a) ? 'box' : 'tiles' };
+  if (a.type === 'level') return [spot, { id: 'screen', label: `Screen ${S.lv.screen + 1}`, icon: 'grid', title: 'What the camera shows at this screen' }, whole];
   if (animated(a)) return [spot, { id: 'frame', label: 'Frame', icon: 'image' }, { id: 'anim', label: a.type === 'prop' ? 'State' : 'Animation', icon: 'film' }, whole];
   if (r.view === 'map') return [spot, whole];
   return [spot, { id: 'tile', label: cap(typeInfo(a).cells.replace(/s$/, '')), icon: 'image' }, whole];
@@ -1110,6 +1270,7 @@ function currentScope() {
   if (S.scope && ok(S.scope)) return S.scope;
   if (S.sel) return 'spot';
   const a = assetOf(S.route.name);
+  if (a?.type === 'level') return 'asset';
   if (animated(a)) return S.play.playing ? 'anim' : 'frame';
   return S.route.view === 'map' ? 'asset' : list.length ? 'tile' : 'asset';
 }
@@ -1117,6 +1278,15 @@ function currentScope() {
 function targetFor(scope) {
   const r = S.route, a = assetOf(r.name);
   const t = { asset: a.name };
+  if (a.type === 'level') {   // a spot or a whole screen, in level pixels
+    t.level = true;
+    if (scope === 'spot') t.region = S.sel;
+    if (scope === 'screen') {
+      const [x, y] = a.screens[S.lv.screen];
+      t.region = [x, y, Math.min(a.screen[0], a.w - x), Math.min(a.screen[1], a.h - y)];
+    }
+    return t;
+  }
   if (animated(a)) {
     const anim = a.anims.find((x) => x.name === r.sub) ?? idleOf(a);
     if (scope !== 'asset') t.anim = anim.name;
@@ -1225,7 +1395,8 @@ function refreshCrits() {
 function refreshCritsLight() {
   const r = S.route, a = assetOf(r.name);
   if (!a || a.type === 'error') return;
-  if (animated(a)) {
+  if (a.type === 'level') renderLevelTabs(a, r.view);
+  else if (animated(a)) {
     const anim = a.anims.find((x) => x.name === r.sub) ?? (r.sub === '~game' ? null : idleOf(a));
     renderSpriteTabs(a, anim);
     if (anim) $$('.fr', $('#strip')).forEach((el, k) => {

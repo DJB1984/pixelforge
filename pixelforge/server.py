@@ -4,8 +4,10 @@
 /viewer/*, /phaser/*   from the installed package
 /live/index.json       every asset by kind, built from the working tree (not export/)
 /live/<name>.png|json  the same sheet + JSON `export` would write, rebuilt whenever the sources change
+                       (icons and fonts: the atlas JSON / font JSON + <name>.xml, as `export` writes them)
                        (<prop>_tiles for a sliced building's tileset)
 /live/levels/<name>.json  a level's Tiled map, built from levels/ (tileset images at ../<tileset>.png)
+/live/level/<name>.png    the level composited like the game (what the dashboard's Levels page shows)
 /api/project           everything the dashboard draws, in one document
 /api/state             cheap poll: source revision, critiques, whether Claude is watching
 POST /api/critiques            {"target": {...}, "text": "..."}  -> the new critique
@@ -24,7 +26,7 @@ from pathlib import Path
 
 from . import __version__
 from . import critiques as cq
-from .export import INDEX_GROUPS, build_slices, preview_build, prop_info
+from .export import INDEX_GROUPS, build_atlas, build_font, build_slices, preview_build, prop_info
 from .level import Level, level_data, levels_dir, list_levels
 from .model import ASSETS, Sprite, SpriteError, describe_entry, list_sprites, project_config, root, sprites_dir, to_hex
 
@@ -51,14 +53,18 @@ def asset_sig(name: str) -> str:
     return _files_sig([*_shared_files(), d / "sprite.json", *sorted(d.glob("**/*.txt"))])   # frames, parts, glyphs
 
 
-def project_sig() -> str:
+def sprites_sig() -> str:
     return _files_sig([*_shared_files(), *sorted(sprites_dir().glob("*/sprite.json")),
                        *sorted(sprites_dir().glob("*/**/*.txt"))])
 
 
+def project_sig() -> str:
+    return sprites_sig() + _files_sig(sorted(levels_dir().glob("*.json")))
+
+
 def level_sig(name: str) -> str:
-    """A level depends on its own file and on every tileset and prop it uses: the whole project."""
-    return project_sig() + _files_sig([levels_dir() / f"{name}.json"])
+    """A level depends on its own file and on every tileset and prop it uses: all the sprites."""
+    return sprites_sig() + _files_sig([levels_dir() / f"{name}.json"])
 
 
 def _png(img) -> bytes:
@@ -86,6 +92,23 @@ class LiveBuilds:
             self._cache[name] = entry = (sig, _png(img), data, s)
             return entry
 
+    def game(self, name: str) -> tuple[str, dict, str | None]:
+        """Icons and fonts as the game loads them (the dashboard draws them as a tileset grid, from the
+        same PNG): an atlas JSON, or a font's JSON and BMFont XML."""
+        sig = asset_sig(name)
+        key = f"game:{name}"
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and hit[0] == sig:
+                return hit
+            s = Sprite.load(name)
+            if s.kind == "font":
+                _, data, xml = build_font(s, 1)
+            else:
+                (_, data), xml = build_atlas(s, 1), None
+            self._cache[key] = entry = (sig, data, xml)
+            return entry
+
     def slices(self, prop: str) -> tuple[str, bytes, dict]:
         sig = asset_sig(prop)
         key = f"{prop}_tiles"
@@ -107,6 +130,28 @@ class LiveBuilds:
         data = level_data(Level.load(name))   # slow (it builds every tileset it uses): don't hold the lock
         with self._lock:
             self._cache[key] = entry = (sig, data)
+        return entry
+
+    def level_view(self, name: str) -> tuple[str, bytes, dict]:
+        """The level composited like the game draws it (1x, accents at camera 0,0) and what the
+        dashboard draws over it: screens, objects."""
+        from .screens import compose, screen_positions
+        sig = level_sig(name)
+        key = f"view:{name}"
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and hit[0] == sig:
+                return hit
+        lv = Level.load(name)
+        img = compose(lv).world()
+        info = {"w": lv.pixel_size[0], "h": lv.pixel_size[1], "tile": [lv.tile_w, lv.tile_h],
+                "cells": [lv.width, lv.height], "view": lv.view, "screen": list(lv.screen_size()),
+                "screens": [list(c) for c in screen_positions(lv)], "player": lv.player,
+                "tilesets": list(lv.tilesets), "layers": [l.name for l in lv.layers],
+                "objects": [{**o.to_dict(), **({"art": list(o.art)} if o.art else {})} for o in lv.objects],
+                "errors": lv.errors()}
+        with self._lock:
+            self._cache[key] = entry = (sig, _png(img), info)
         return entry
 
 
@@ -135,6 +180,8 @@ def live_index() -> dict:
         found[{"prop": "props", "tileset": "tilesets", "icons": "icons", "font": "fonts"}.get(kind, "sprites")].append(n)
     found["tilesets"] = sorted(found["tilesets"] + [f"{p}_tiles" for p in sliced_props()])
     found["levels"] = list_levels()
+    if project_config().get("hud"):
+        found["hud"] = project_config()["hud"]
     return found
 
 
@@ -170,9 +217,20 @@ def _asset(name: str) -> dict:
     return out
 
 
+def _level_asset(name: str) -> dict:
+    try:
+        sig, _, info = BUILDS.level_view(name)
+    except Exception as e:   # as for sprites: one broken level shouldn't take the dashboard down
+        return {"name": name, "type": "error", "error": str(e)}
+    return {"name": name, "type": "level", "rev": sig, "sheet": f"/live/level/{name}.png?v={sig}", **info}
+
+
 def project_data() -> dict:
+    sprites = list_sprites()
+    # a level named like a sprite would shadow it in the dashboard (assets are keyed by name)
+    levels = [_level_asset(n) for n in list_levels() if n not in sprites]
     return {"game": project_config().get("name") or root().name, "version": __version__,
-            "rev": project_sig(), "assets": [_asset(n) for n in list_sprites()]}
+            "rev": project_sig(), "assets": levels + [_asset(n) for n in sprites]}
 
 
 def state_data() -> dict:
@@ -226,6 +284,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if name not in list_levels():
                     return self._json({"error": f"no level {name}"}, 404)
                 return self._json(BUILDS.level(name)[1])
+            if parts[:2] == ["live", "level"] and len(parts) == 3 and parts[2].endswith(".png"):
+                name = parts[2][:-4]
+                if name not in list_levels():
+                    return self._json({"error": f"no level {name}"}, 404)
+                png = BUILDS.level_view(name)[1]
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(png)))
+                self.end_headers()
+                self.wfile.write(png)
+                return
         except (SpriteError, ValueError, OSError) as e:
             return self._json({"error": str(e)}, 500)
         super().do_GET()
@@ -234,13 +303,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if file == "index.json":
             return self._json(live_index())
         name, _, ext = file.rpartition(".")
-        if ext not in ("png", "json"):
+        if ext not in ("png", "json", "xml"):
             return self._json({"error": f"no live asset {file}"}, 404)
         if name not in list_sprites() and name.endswith("_tiles") and name[:-6] in sliced_props():
             _, png, data = BUILDS.slices(name[:-6])
         elif name in list_sprites():
-            _, png, data, _ = BUILDS.get(name)
+            _, png, data, s = BUILDS.get(name)
+            if s.kind in ("icons", "font") and ext != "png":
+                _, data, xml = BUILDS.game(name)
+                if ext == "xml":
+                    if xml is None:
+                        return self._json({"error": f"{name} is not a font"}, 404)
+                    body = xml.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/xml")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
         else:
+            return self._json({"error": f"no live asset {file}"}, 404)
+        if ext == "xml":
             return self._json({"error": f"no live asset {file}"}, 404)
         if ext == "json":
             return self._json(data)

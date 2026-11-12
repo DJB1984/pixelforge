@@ -386,6 +386,72 @@ export function createPixelforgeAll(scene) {
   return names;
 }
 
+// ---- the HUD: pixelforge.json "hud" (export/index.json carries it) ---------------------------------
+//   const hud = addPixelforgeHud(this);      // its own scene over this one: zoom 1, never scrolls
+//   hud.set('hearts', 2); hud.set('gold', 'GOLD 130');                 // items with an "id"
+// Items, all placed by their top-left at the game's resolution:
+//   {"id": "hearts", "icon": "ui:heart", "at": [4, 4], "repeat": 3, "step": 10}   set(n): show n of them
+//   {"id": "gold", "text": "font:GOLD 120", "at": [4, 18], "tint": "#ffffff"}     set(s): new text
+//   {"panel": "ui:panel", "at": [0, 140], "size": [320, 40]}                       a nine-slice
+// `pixelforge level NAME --screens` draws the same items, so the screenshots match the game.
+
+export const PIXELFORGE_HUD = 'pixelforge-hud';
+
+const splitRef = (s) => { const i = String(s).indexOf(':'); return [s.slice(0, i), s.slice(i + 1)]; };
+
+function applyHud(hud, id) {
+  const obj = hud.items[id], v = hud.values[id];
+  if (obj === undefined || v === undefined) return;
+  if (Array.isArray(obj)) obj.forEach((o, i) => o.setVisible(i < v));
+  else if (obj.setText) obj.setText(String(v));
+  else if (obj.setFrame) obj.setFrame(v);
+}
+
+// Builds the items into `scene` (any scene; addPixelforgeHud gives them their own).
+export function buildPixelforgeHud(scene, items = [], hud = { values: {} }) {
+  hud.scene = scene;
+  hud.items = {};
+  hud.values ??= {};
+  hud.set ??= (id, value) => { hud.values[id] = value; applyHud(hud, id); };
+  for (const item of items) {
+    const [x, y] = item.at ?? [0, 0];
+    let obj;
+    if (item.panel) {
+      const [sheet, icon] = splitRef(item.panel);
+      const [w, h] = item.size;
+      obj = addPixelforgePanel(scene, x, y, sheet, icon, w, h).setOrigin(0, 0);
+    } else if (item.icon) {
+      const [sheet, icon] = splitRef(item.icon);
+      const step = item.step ?? scene.textures.getFrame(sheet, icon).width + 2;
+      obj = [];
+      for (let i = 0; i < (item.repeat ?? 1); i++) obj.push(scene.add.image(x + i * step, y, sheet, icon).setOrigin(0, 0));
+      if (obj.length === 1) obj = obj[0];
+    } else if (item.text) {
+      const [font, text] = splitRef(item.text);
+      obj = scene.add.bitmapText(x, y, font, text);
+      if (item.tint) obj.setTint(hexColor(item.tint));
+    }
+    if (item.id && obj) hud.items[item.id] = obj;
+  }
+  for (const id of Object.keys(hud.values)) applyHud(hud, id);
+  return hud;
+}
+
+// Runs the HUD as the 'pixelforge-hud' scene on top of the game (calling it again rebuilds it, e.g.
+// after a level restart). Items default to the loaded index's "hud". The scene starts on Phaser's next
+// step, so the returned hud fills in then; set() before that is remembered and applied.
+export function addPixelforgeHud(scene, items) {
+  items ??= scene.cache.json.get(PIXELFORGE_INDEX)?.hud ?? [];
+  const hud = { values: {}, items: {}, scene: null };
+  hud.set = (id, value) => { hud.values[id] = value; applyHud(hud, id); };
+  const data = { items, hud };
+  if (scene.scene.get(PIXELFORGE_HUD)) scene.scene.launch(PIXELFORGE_HUD, data);
+  else scene.scene.add(PIXELFORGE_HUD, { key: PIXELFORGE_HUD, create(d) { buildPixelforgeHud(this, d.items, d.hud); } },
+    true, data);
+  scene.scene.bringToTop(PIXELFORGE_HUD);
+  return hud;
+}
+
 // ---- the player --------------------------------------------------------------------------------
 // One controller for the dashboard, the playtests and the real game, so they all play the same:
 //

@@ -473,11 +473,14 @@ def check_level(name: str) -> list[Issue]:
     return issues
 
 
-def check(names: list[str], levels: list[str] | None = None) -> list[Issue]:
-    """Sprites, then levels (default: none)."""
+def check(names: list[str], levels: list[str] | None = None, hud: bool = False) -> list[Issue]:
+    """Sprites, then levels (default: none), then pixelforge.json's "hud" if `hud`."""
     out = []
     for n in names:
         out.extend(check_sprite(n))
     for n in levels or []:
         out.extend(check_level(n))
+    if hud:
+        from .screens import check_hud
+        out.extend(Issue("warn", "pixelforge.json", m) for m in check_hud())
     return out

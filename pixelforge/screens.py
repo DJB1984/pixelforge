@@ -41,10 +41,11 @@ class Composite:
     accents: list[tuple[Image.Image, int, int, float]] = field(default_factory=list)   # (img, x, y, scroll)
     player: tuple[Sprite, object, int, int] | None = None    # sprite, its idle grid, top-left x, y
 
-    def world(self, cam: tuple[int, int] = (0, 0)) -> Image.Image:
-        """Everything, level-sized, with the accents placed for this camera position."""
+    def world(self, cam: tuple[int, int] = (0, 0), sky: bool = True) -> Image.Image:
+        """Everything, level-sized, with the accents placed for this camera position (`sky=False`: on
+        transparent, to count the art's colors without the background's)."""
         lv = self.level
-        img = self.background.copy()
+        img = self.background.copy() if sky else Image.new("RGBA", self.background.size)
         cx, cy = cam
         for a, x, y, scroll in self.accents:
             # an accent with scroll s at `at` shows on screen at at - cam * s; in level space that's at + cam * (1 - s)
@@ -92,6 +93,11 @@ def sprite_frame(name: str, state: str | None = None) -> tuple[Sprite, object, I
     return _frames[key]
 
 
+def player_spawn(lv: Level) -> LevelObject | None:
+    """Where the game puts the player: the spawn named "player", else the first spawn."""
+    return next((o for o in lv.spawns() if o.name == "player"), next(iter(lv.spawns()), None))
+
+
 def compose(lv: Level) -> Composite:
     _frames.clear()
     W, H = lv.pixel_size
@@ -119,7 +125,7 @@ def compose(lv: Level) -> Composite:
         if name:
             s, _, img = sprite_frame(name, o.state)
             comp.things.append(Placed(img, o.x - s.origin[0], o.y - s.origin[1], o.y, o.name))
-    spawn = next((o for o in lv.spawns() if o.name == "player"), next(iter(lv.spawns()), None))
+    spawn = player_spawn(lv)
     if lv.player and spawn:
         try:
             s, g, img = sprite_frame(lv.player)
@@ -197,13 +203,23 @@ def check_hud() -> list[str]:
 
 
 # ---- screens --------------------------------------------------------------------------------
+def _axis(length: int, screen: int, spawn: int | None) -> list[int]:
+    """Camera offsets along one axis. Several screens: step by a screen, the last pulled back to the
+    edge (as the camera's bounds do). A level less than a screen and a quarter long only scrolls a
+    little, so it gets one position: where the camera sits with the spawn in the middle."""
+    if length <= screen + screen // 4:
+        c = (spawn if spawn is not None else length // 2) - screen // 2
+        return [max(0, min(c, length - screen))]
+    return sorted({min(x, length - screen) for x in range(0, length, screen)})
+
+
 def screen_positions(lv: Level) -> list[tuple[int, int]]:
-    """Camera positions that cover the level screen by screen, left to right, top to bottom (the last
-    row and column are pulled back to the level's edge, as the camera's bounds do)."""
+    """Camera positions that cover the level screen by screen, left to right, top to bottom."""
     W, H = lv.pixel_size
     sw, sh = lv.screen_size()
-    xs = sorted({min(x, max(0, W - sw)) for x in range(0, W, sw)})
-    ys = sorted({min(y, max(0, H - sh)) for y in range(0, H, sh)})
+    spawn = player_spawn(lv)
+    xs = _axis(W, sw, spawn.x if spawn else None)
+    ys = _axis(H, sh, spawn.y - lv.tile_h // 2 if spawn else None)
     return [(x, y) for y in ys for x in xs]
 
 
@@ -237,9 +253,10 @@ def visible(o: LevelObject, cam: tuple[int, int], size: tuple[int, int]) -> bool
 def screen_report(comp: Composite, cam: tuple[int, int], shot: Image.Image) -> str:
     lv = comp.level
     sw, sh = lv.screen_size()
-    colors = len({px[:3] for px in shot.getdata()})
+    art = comp.world(cam, sky=False).crop((cam[0], cam[1], cam[0] + sw, cam[1] + sh))
+    colors = len({c[:3] for _, c in art.getcolors(art.width * art.height) if c[3]})
     objs = [o.name for o in lv.objects if visible(o, cam, (sw, sh)) and o.type != "spawn"]
-    parts = [f"{colors} colors"]
+    parts = [f"{colors} colors (not counting the sky)"]
     if comp.player:
         s, g, px, py = comp.player
         # the player where it spawned if that's on this screen, else standing in the middle of it
@@ -254,8 +271,8 @@ def screen_report(comp: Composite, cam: tuple[int, int], shot: Image.Image) -> s
         _paste(patch, bare, -px, -py)
         e = edge_contrast(s, g, patch)
         if e.pairs:
-            where = "at the spawn" if spawn_here else "mid-screen"
-            parts.append(f"{s.name} vs ground {where}: median {e.median}:1, worst {e.worst}:1"
+            where = "at the spawn" if spawn_here else "if it stood mid-screen"
+            parts.append(f"{s.name} against what's behind it {where}: median {e.median}:1, worst {e.worst}:1"
                          + (f" ({len(e.low)} low-contrast edge px)" if e.low else ""))
     parts.append("objects: " + (", ".join(objs) if objs else "none"))
     return "  ".join(parts)
@@ -266,39 +283,57 @@ def _labelled(img: Image.Image, scale: int, lv: Level, grid: bool, labels: bool)
     big = zoom(img, scale)
     d = ImageDraw.Draw(big)
     if grid:
-        sw, sh = lv.screen_size()
         W, H = lv.pixel_size
-        for x in range(sw, W, sw):
+        cams = screen_positions(lv)
+        xs, ys = sorted({c[0] for c in cams}), sorted({c[1] for c in cams})
+        for x in xs[1:]:   # where each screen after the first starts
             d.line([(x * scale, 0), (x * scale, H * scale)], fill=GRID, width=1)
-        for y in range(sh, H, sh):
+        for y in ys[1:]:
             d.line([(0, y * scale), (W * scale, y * scale)], fill=GRID, width=1)
-        for i, (cx, cy) in enumerate(screen_positions(lv), 1):
+        for i, (cx, cy) in enumerate(cams, 1):
             d.text((cx * scale + 4, cy * scale + 3), str(i), fill=LABEL, font=font(12), stroke_width=2,
                    stroke_fill=LABEL_SHADOW)
     if labels:
         f = font(11)
         for o in lv.objects:
+            lx, ly = o.x, o.y
             if o.rect:
                 x, y, w, h = o.rect
                 d.rectangle([x * scale, y * scale, (x + w) * scale - 1, (y + h) * scale - 1], outline=(44, 232, 245, 255))
+                lx, ly = x + w / 2, y + h
             text = o.name if o.type in (o.name, "prop", "sprite") else f"{o.name} ({o.type})"
             if o.to:
                 text += f" -> {o.to}"
-            d.text((o.x * scale, o.y * scale + 2), text, fill=LABEL, font=f, anchor="ma", stroke_width=2,
+            d.text((lx * scale, ly * scale + 2), text, fill=LABEL, font=f, anchor="ma", stroke_width=2,
                    stroke_fill=LABEL_SHADOW)
     return big
+
+
+def _bands(img: Image.Image, scale: int, lv: Level, budget: int) -> list[tuple[int, Image.Image]]:
+    """Cut a zoomed level that's wider than `budget` into strips a whole number of screens wide."""
+    W = lv.pixel_size[0]
+    sw = lv.screen_size()[0]
+    step = max(sw, budget // scale // sw * sw)
+    return [(x, img.crop((x * scale, 0, min(W, x + step) * scale, img.height))) for x in range(0, W, step)]
 
 
 def level_overview(lv: Level, budget: int = 1400) -> tuple[Image.Image, list[str]]:
     comp = compose(lv)
     world = comp.world()
     W, H = lv.pixel_size
-    scale = max(1, min(6, budget // max(W, 1)))
+    # 2x at least, so tiles and labels read; a long level is cut into strips instead of shrunk
+    scale = max(2, min(6, budget // max(W, 1)))
     sw, sh = lv.screen_size()
     head = (f"{lv.name}  {lv.width}x{lv.height} tiles of {lv.tile_w}x{lv.tile_h} = {W}x{H} px  {lv.view} view  "
             f"screens of {sw}x{sh} px: {len(screen_positions(lv))}")
-    sections = [(f"{head}   (x{scale}; accents shown with the camera at 0,0)", _labelled(world, scale, lv, True, True)),
-                ("1x", world)]
+    big = _labelled(world, scale, lv, True, True)
+    bands = _bands(big, scale, lv, budget)
+    sections = []
+    for i, (x, band) in enumerate(bands):
+        where = f", x {x}-{x + band.width // scale}" if len(bands) > 1 else ""
+        title = f"{head}   (x{scale}{where}; accents shown with the camera at 0,0)" if i == 0 else f"x{scale}{where}"
+        sections.append((title, band))
+    sections.append(("1x", world))
     lines = [head]
     for i, cam in enumerate(screen_positions(lv), 1):
         lines.append(f"  screen {i} at ({cam[0]}, {cam[1]}): {screen_report(comp, cam, render_screen(comp, cam, None))}")
@@ -320,5 +355,6 @@ def screens_sheet(lv: Level, cams: list[tuple[int, int]] | None = None,
         pair = Image.new("RGBA", (sw * 3 + 10, sh * 2), LABEL_BG)
         pair.alpha_composite(shot, (0, 0))
         pair.alpha_composite(zoom(shot, 2), (sw + 10, 0))
-        sections.append((f"{title or lv.name}  screen {i}  camera ({cam[0]}, {cam[1]})  {report}", pair))
+        objs = report.rsplit("objects: ", 1)[-1]
+        sections.append((f"{title or lv.name}  screen {i}  camera ({cam[0]}, {cam[1]})  1x and 2x  objects: {objs}", pair))
     return stack(sections), lines

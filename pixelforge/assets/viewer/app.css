@@ -220,6 +220,12 @@ canvas { image-rendering: pixelated; display: block; }
 .fr .lbl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fr .hit { width: 6px; height: 6px; border-radius: 1px; background: var(--hit); flex: none; }
 .fr .cdot { position: absolute; top: 0; right: 0; }
+/* a level is bigger than the stage: scroll it from its top-left instead of centring (which clips) */
+.stage.pan { place-items: start; }
+.stage.pan canvas { margin: auto; }
+.fr .type { color: var(--fg-3); font-size: 10.5px; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip .lv-err { flex: none; align-self: center; display: flex; gap: 6px; align-items: center; max-width: 360px; padding: 6px 10px;
+                 border-radius: 8px; color: var(--danger); font-size: 12px; background: rgba(242, 98, 106, .08); }
 .game { position: absolute; inset: 0; border: 0; width: 100%; height: 100%; background: var(--stage); }
 .error-box { margin: 28px; padding: 16px; border-radius: var(--r-lg); background: rgba(242, 98, 106, .08);
              box-shadow: inset 0 0 0 1px rgba(242, 98, 106, .3); }

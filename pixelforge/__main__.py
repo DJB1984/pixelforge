@@ -103,6 +103,32 @@ def cmd_new_level(args):
           f"objects.rows")
 
 
+def cmd_level(args):
+    from . import screens as sc
+    try:
+        lv = lvl.Level.load(args.name)
+    except SpriteError as e:
+        sys.exit(str(e))
+    if args.at:
+        try:
+            tx, ty = (int(v) for v in args.at.replace(" ", "").split(","))
+        except ValueError:
+            sys.exit(f"--at takes a tile as X,Y, got {args.at!r}")
+        cam = sc.centred(lv, tx, ty)
+        img, lines = sc.screens_sheet(lv, [cam], f"{lv.name} at tile ({tx}, {ty})")
+        out = _previews() / f"level_{lv.name}_at_{tx}_{ty}.png"
+    elif args.screens:
+        img, lines = sc.screens_sheet(lv)
+        out = _previews() / f"level_{lv.name}_screens.png"
+    else:
+        img, lines = sc.level_overview(lv)
+        out = _previews() / f"level_{lv.name}.png"
+    for line in lines:
+        print(line)
+    img.save(out)
+    print(_rel(out))
+
+
 def cmd_new(args):
     path = sprites_dir() / args.name
     if path.exists():
@@ -426,7 +452,7 @@ def cmd_palette(args):
 
 def cmd_check(args):
     names, levels = _split(args.sprites)
-    issues = check(names, levels)
+    issues = check(names, levels, hud=not args.sprites)
     shown = [i for i in issues if args.verbose or i.level != "info"]
     for i in shown:
         print(i)
@@ -606,13 +632,14 @@ def cmd_critiques(args):
         cq.update(c["id"], status="fixed", note=args.message)
         print(f"fixed #{c['id']}: {cq.label(c['target'])}")
         name = c["target"]["asset"]
-        bad = [i for i in check([name]) if i.level == "error"]
+        names, levels = ([], [name]) if c["target"].get("level") else ([name], [])
+        bad = [i for i in check(names, levels) if i.level == "error"]
         if bad:
             for i in bad:
                 print(f"  {i}")
             print(f"  not exported: fix the errors above, then `pixelforge export {name}`")
         else:
-            for line in _export([name]):
+            for line in _export(names, levels=levels):
                 print(f"  {line}")
         return
     shown = [c for c in cq.all_critiques() if args.all or c["status"] != "fixed"]
@@ -713,6 +740,14 @@ def main(argv=None):
     q.add_argument("--size", help="WxH in tiles (default: one screen at the game's resolution)")
     q.add_argument("--tileset", help="default: the first tileset")
     q.set_defaults(fn=cmd_new_level)
+
+    q = sub.add_parser("level", help="render a whole level (screen grid, labels), or --screens / --at X,Y: what "
+                                     "the player sees, with the HUD")
+    q.add_argument("name")
+    g = q.add_mutually_exclusive_group()
+    g.add_argument("--screens", action="store_true", help="every camera-sized screen at 1x and 2x, numbered")
+    g.add_argument("--at", metavar="X,Y", help="one screen centred on this tile")
+    q.set_defaults(fn=cmd_level)
 
     q = sub.add_parser("new", help="scaffold a sprite")
     q.add_argument("name")

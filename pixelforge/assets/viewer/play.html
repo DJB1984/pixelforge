@@ -27,10 +27,10 @@
 <div id="game"></div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script type="module">
-import { loadPixelforgeAll, createPixelforgeAll, pixelforgeLevel, drawPixelforgeBoxes } from '../phaser/pixelforge.js';
+import { loadPixelforgeAll, createPixelforgeAll, pixelforgeLevel, addPixelforgeHud, drawPixelforgeBoxes } from '../phaser/pixelforge.js';
 
 // Plays a level the way the game does (pixelforgeLevel + addPixelforgePlayer), from `pixelforge serve`'s
-// live builds: edit levels/ or sprites/ and reload. Doors lead to their level.
+// live builds: edit levels/ or sprites/ and reload. Doors lead to their level. The HUD is pixelforge.json's.
 const BASE = '../live/';
 const params = new URLSearchParams(location.search);
 if (params.has('embed')) document.body.classList.add('embed');
@@ -44,7 +44,10 @@ const first = levels.includes(params.get('level')) ? params.get('level') : level
 $('level').innerHTML = levels.map((n) => `<option ${n === first ? 'selected' : ''}>${n}</option>`).join('');
 $('level').onchange = () => { params.set('level', $('level').value); location.search = params; };
 const [RW, RH] = project.resolution ?? [320, 180];
-const ZOOM = project.zoom ?? 3;
+// embedded in the dashboard: the biggest whole zoom that fits the frame (never more than the game's)
+const ZOOM = params.has('embed')
+  ? Math.max(1, Math.min(project.zoom ?? 3, Math.floor((innerWidth - 32) / RW), Math.floor((innerHeight - 48) / RH)))
+  : project.zoom ?? 3;
 const HELP = {
   side: '<kbd>←</kbd><kbd>→</kbd> walk · hold <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>X</kbd> attack',
   topdown: '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD walk · <kbd>X</kbd> attack',
@@ -60,6 +63,7 @@ class PlayScene extends Phaser.Scene {
     createPixelforgeAll(this);
     this.level = pixelforgeLevel(this, this.levelName, { spawn: this.spawn });
     window.pixelforgeLevelState = this.level;
+    window.pixelforgeHud = addPixelforgeHud(this);   // pixelforge.json "hud", in its own scene
     $('help').innerHTML = HELP[this.level.info.view] ?? '';
     const player = this.level.player;
     if (player) for (const e of ['pixelforge-land', 'pixelforge-jump', 'pixelforge-attack']) {

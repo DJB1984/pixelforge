@@ -7,7 +7,8 @@ import json
 from datetime import date
 
 from .export import build_sheet, build_tileset, prop_info
-from .model import ASSETS, Sprite, list_sprites, project_config, root, to_hex
+from .level import Level, list_levels
+from .model import ASSETS, Sprite, SpriteError, list_sprites, project_config, root, to_hex
 
 
 def _data_uri(img) -> str:
@@ -51,7 +52,26 @@ def gallery_data(names: list[str] | None = None) -> dict:
             "anims": anims,
         })
     game = project_config().get("name") or root().name
-    return {"game": game, "generated": date.today().isoformat(), "sprites": sprites, "tilesets": tilesets}
+    return {"game": game, "generated": date.today().isoformat(), "sprites": sprites, "tilesets": tilesets,
+            "levels": [] if names else level_data()}
+
+
+def level_data() -> list[dict]:
+    """Every level that loads: the whole level at 1x, and each screen as the player sees it (HUD on top)."""
+    from .screens import compose, hud_image, render_screen, screen_positions
+    out = []
+    for name in list_levels():
+        try:
+            lv = Level.load(name)
+            comp = compose(lv)
+        except SpriteError:
+            continue   # `check` reports it; the gallery shows what works
+        sw, sh = lv.screen_size()
+        hud = hud_image(sw, sh)
+        out.append({"name": lv.name, "view": lv.view, "cells": [lv.width, lv.height], "w": lv.pixel_size[0],
+                    "h": lv.pixel_size[1], "objects": len(lv.objects), "image": _data_uri(comp.world()),
+                    "screens": [_data_uri(render_screen(comp, cam, hud)) for cam in screen_positions(lv)]})
+    return out
 
 
 def render_gallery(names: list[str] | None = None, fragment: bool = False) -> str:

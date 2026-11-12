@@ -1749,7 +1749,7 @@
   {
    "name": "accents",
    "type": "string",
-   "value": "[{\"prop\": \"cloud\", \"at\": [30, 30]}, {\"prop\": \"cloud\", \"at\": [170, 52]}, {\"prop\": \"cloud\", \"at\": [300, 24]}, {\"prop\": \"cloud\", \"at\": [440, 46]}]"
+   "value": "[{\"prop\": \"cloud\", \"at\": [84, 30]}, {\"prop\": \"cloud\", \"at\": [170, 52]}, {\"prop\": \"cloud\", \"at\": [300, 24]}, {\"prop\": \"cloud\", \"at\": [440, 46]}]"
   },
   {
    "name": "player",
@@ -1776,7 +1776,7 @@
    {
     "prop": "cloud",
     "at": [
-     30,
+     84,
      30
     ]
    },

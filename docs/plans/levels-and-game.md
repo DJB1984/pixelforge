@@ -184,16 +184,16 @@ collisions, roof walk-behind, the door trigger fires, the princess runs and jump
 
 ## Phase 3: See whole screens, and the Levels page in the dashboard
 ### Screens (CLI)
-- [ ] `level NAME` → `previews/level_<name>.png`: the whole level at 1x and zoomed to fit ~1400px, composited like
+- [x] `level NAME` → `previews/level_<name>.png`: the whole level at 1x and zoomed to fit ~1400px, composited like
   the game (background, parallax accents, tile layers, objects y-sorted, `above` layers), with a faint grid of
   screen-sized rectangles (`resolution` / zoom) and object labels.
-- [ ] `level NAME --screens` → `previews/level_<name>_screens.png`: each camera-sized screen at 1x and 2x, as the
+- [x] `level NAME --screens` → `previews/level_<name>_screens.png`: each camera-sized screen at 1x and 2x, as the
   player would see it.
   - Parallax accents are offset by `-cam * scroll`, the HUD is drawn on top (below), and each screen is numbered.
   - Per screen it reports: colors on screen, the player sprite's contrast against the ground under it (reuse
     `context.py`), and objects visible.
-- [ ] `level NAME --at X,Y` renders one screen centred on a tile.
-- [ ] **HUD mock** (optional `"hud"` in `pixelforge.json`), the same data the starter's HUD scene reads:
+- [x] `level NAME --at X,Y` renders one screen centred on a tile.
+- [x] **HUD mock** (optional `"hud"` in `pixelforge.json`), the same data the starter's HUD scene reads:
   ```json
   "hud": [{"icon": "ui:heart", "at": [4, 4], "repeat": 3, "step": 10},
           {"text": "font:GOLD 120", "at": [4, 18]},
@@ -202,19 +202,21 @@ collisions, roof walk-behind, the door trigger fires, the princess runs and jump
   Add Phaser `addPixelforgeHud(scene)`, which builds it (in its own scene).
 
 ### Dashboard
-- [ ] Server: levels in `/api/project` (type `level`), `levels/*.json` in `project_sig`/`asset_sig`,
+- [x] Server: levels in `/api/project` (type `level`), `levels/*.json` in `project_sig`/`asset_sig`,
   `/live/levels/<name>.json` (the Tiled map built live) and `/live/level/<name>.png` (the rendered level,
   cached by signature). Add `levels` to `/live/index.json`.
-- [ ] `app.js`: a **Levels** section in `TYPES` (first in the nav).
+- [x] `app.js`: a **Levels** section in `TYPES` (first in the nav).
   - The level page shows the rendered level with zoom/pan, a "screens" overlay toggle, a "Screen N" stepper, and
     an object list (click → highlight).
   - Critiques target `{"asset": name, "level": true, "region": [x, y, w, h]}` in level pixels. Extend
     `critiques.py` (`clean_target`, `details`, `render_target`) for levels: details list the tiles and objects
     under the region.
   - A **Play** tab with `/viewer/play.html?level=NAME&embed=1`.
-- [ ] `assets/viewer/play.html`: loads everything from `/live/`, does `pixelforgeLevel` + `addPixelforgeHud`,
+- [x] `assets/viewer/play.html`: loads everything from `/live/`, does `pixelforgeLevel` + `addPixelforgeHud`,
   and shows controls help. It exposes `window.pixelforgeGame` and `window.pixelforgePlay` (see Phase 5).
-- [ ] Gallery: a levels section (the rendered PNG plus a screen strip).
+  (Done except `window.pixelforgePlay`, which Phase 5 adds. Also fixed on the way: `/live/` served icons and fonts in
+  the dashboard's tileset format, so the game couldn't load them; it now serves the atlas JSON and BMFont XML.)
+- [x] Gallery: a levels section (the rendered PNG plus a screen strip).
 
 **Done when** Claude can run `level village --screens`, Read the PNG, and judge composition; and the developer can
 open the level in the dashboard, pin a critique on a spot, and play it.

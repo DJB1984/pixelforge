@@ -6,7 +6,9 @@ They live in critiques.json at the project root:
 A target names an asset and optionally narrows it down:
     sprite:  {"asset": "knight", "anim": "attack", "frame": 2, "region": [x, y, w, h]}
     tileset: {"asset": "terrain", "tile": "water_n", "region": [...]}   or   {"asset": "terrain", "map": true, "region": [...]}
-`region` is in frame (or tile, or sample-map) pixels, the same coordinates as `show` and the hit/hurt boxes.
+    level:   {"asset": "village", "level": true, "region": [...]}
+`region` is in frame (or tile, or sample-map) pixels, the same coordinates as `show` and the hit/hurt boxes;
+on a level it's in level pixels (column x 16 for 16px tiles).
 
 Status: open (waiting) -> working (handed to Claude by `critiques watch`) -> fixed (`critiques done`).
 """
@@ -22,6 +24,7 @@ from pathlib import Path
 from PIL import ImageDraw
 
 from . import render as rd
+from .level import Level, list_levels
 from .model import Sprite, SpriteError, describe_entry, list_sprites, root
 
 FILE = "critiques.json"
@@ -109,6 +112,11 @@ def clean_target(t: dict) -> dict:
     if not isinstance(t, dict) or not isinstance(t.get("asset"), str):
         raise SpriteError("target needs an asset name")
     name = t["asset"]
+    if t.get("level"):
+        if name not in list_levels():
+            raise SpriteError(f"no level {name!r}")
+        w, h = Level.load(name).pixel_size
+        return _region(t, {"asset": name, "level": True}, w, h)
     if name not in list_sprites():
         raise SpriteError(f"no sprite or tileset {name!r}")
     s = Sprite.load(name)
@@ -136,6 +144,11 @@ def clean_target(t: dict) -> dict:
                     raise SpriteError(f"{name}:{a.name} has {len(a.frames)} frames, not frame {i}")
                 out["frame"] = i
         w, h = (s.width, s.height) if "frame" in out else (0, 0)
+    return _region(t, out, w, h)
+
+
+def _region(t: dict, out: dict, w: int, h: int) -> dict:
+    """Adds the target's region (if any), clamped to the w x h surface it sits on."""
     if t.get("region") is not None:
         if not w:
             raise SpriteError("a region needs a frame, tile or map to sit on")
@@ -149,6 +162,8 @@ def clean_target(t: dict) -> dict:
 def label(t: dict) -> str:
     """knight > attack > frame 2 > spot (24,10 6x5)"""
     parts = [t["asset"]]
+    if t.get("level"):
+        parts.append("level")
     if "anim" in t:
         parts.append(t["anim"])
     if "frame" in t:
@@ -165,6 +180,8 @@ def label(t: dict) -> str:
 
 def details(t: dict) -> list[str]:
     """What Claude needs to find the art: which frame entry or tile, which layer files."""
+    if t.get("level"):
+        return _level_details(t)
     try:
         s = Sprite.load(t["asset"])
     except SpriteError as e:
@@ -192,6 +209,41 @@ def details(t: dict) -> list[str]:
         elif "anim" in t:
             a = s.anim(t["anim"])
             out.append(f"{len(a.frames)} frames at {a.fps:g} fps, {'loops' if a.loop else 'plays once'}")
+    return out
+
+
+def _level_details(t: dict) -> list[str]:
+    """Where a level spot is in levels/<name>.json: its rows and columns, the tiles on each layer and
+    the objects there."""
+    try:
+        lv = Level.load(t["asset"])
+    except SpriteError as e:
+        return [f"(can't load level {t['asset']}: {e})"]
+    if "region" not in t:
+        return [f"levels/{lv.name}.json: {lv.width}x{lv.height} tiles, {lv.view} view "
+                f"(`pixelforge level {lv.name} --screens` shows every screen)"]
+    x, y, w, h = t["region"]
+    c0, c1 = x // lv.tile_w, min(lv.width - 1, (x + w - 1) // lv.tile_w)
+    r0, r1 = y // lv.tile_h, min(lv.height - 1, (y + h - 1) // lv.tile_h)
+    span = lambda a, b: f"{a}" if a == b else f"{a}-{b}"
+    out = [f"levels/{lv.name}.json: rows {span(r0, r1)}, columns {span(c0, c1)} (0-based: character {c0} of rows[{r0}] "
+           f"is the top-left cell)"]
+    for layer in lv.layers:
+        seen = []
+        for cy in range(r0, r1 + 1):
+            for cx in range(c0, c1 + 1):
+                n = lv.tile_name(layer.cells[cy][cx])
+                if n and n not in seen:
+                    seen.append(n)
+        if seen:
+            out.append(f"layer {layer.name}{' (above)' if layer.above else ''}: {', '.join(seen)}")
+    objs = []
+    for o in lv.objects:
+        ox, oy, ow, oh = o.rect or o.art or (o.x, o.y - 1, 1, 1)
+        if ox < x + w and x < ox + ow and oy < y + h and y < oy + oh:
+            what = o.name if o.type in (o.name, "prop", "sprite") else f"{o.name} ({o.type})"
+            objs.append(f"{what} at ({o.x}, {o.y}) from {o.source}")
+    out.append("objects: " + ("; ".join(objs) if objs else "none"))
     return out
 
 
@@ -279,8 +331,12 @@ def watch(once: bool, emit=print, interval: float = 1.0, stop=None) -> None:
 def render_target(c: dict) -> Path:
     """previews/critique_<id>.png: the critiqued frame / tile / map / animation, the spot outlined."""
     t = c["target"]
-    s = Sprite.load(t["asset"])
     region = t.get("region")
+    out = _state_dir() / f"critique_{c['id']}.png"
+    if t.get("level"):
+        _level_picture(t, region).save(out)
+        return out
+    s = Sprite.load(t["asset"])
     if s.tiled:
         if "tile" in t:
             img = rd.preview(s, s.tile(t["tile"]), scale=16, title=label(t), show_origin=False, marks=[region] if region else None)
@@ -297,9 +353,31 @@ def render_target(c: dict) -> Path:
         img = rd.preview(s, g, scale=rd.auto_scale(g.width, g.height, most=12), title=label(t), marks=[region] if region else None)
     else:
         img = rd.sheet(s, [t["anim"]] if "anim" in t else list(s.animations), scale=6)
-    out = _state_dir() / f"critique_{c['id']}.png"
     img.save(out)
     return out
+
+
+def _level_picture(t: dict, region):
+    """A screen's worth of level around the spot at 3x (outlined), and the whole level at 1x with the
+    spot marked; with no spot, the level overview."""
+    from .screens import compose, level_overview
+    lv = Level.load(t["asset"])
+    if not region:
+        return level_overview(lv)[0]
+    world = compose(lv).world()
+    W, H = lv.pixel_size
+    sw, sh = lv.screen_size()
+    x, y, w, h = region
+    x0 = max(0, min(x + w // 2 - sw // 2, W - sw))
+    y0 = max(0, min(y + h // 2 - sh // 2, H - sh))
+    crop = world.crop((x0, y0, min(W, x0 + sw), min(H, y0 + sh)))
+    scale = 3
+    near = rd.zoom(crop, scale)
+    _outline(ImageDraw.Draw(near), [x - x0, y - y0, w, h], scale)
+    whole = world.copy()
+    _outline(ImageDraw.Draw(whole), region, 1)
+    return rd.stack([(f"{label(t)}   (x{scale}: level pixels {x0},{y0} to {x0 + crop.width},{y0 + crop.height})", near),
+                     ("the whole level, 1x", whole)])
 
 
 def _outline(d: ImageDraw.ImageDraw, region, scale: int) -> None:
