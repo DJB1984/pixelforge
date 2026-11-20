@@ -61,6 +61,7 @@ const S = {
   view: { zoom: null, zoomFor: null, bg: 'check', boxes: false, origin: false, onion: false, grid: false, repeat: true, angle: 0, spin: false },
   play: { playing: true, frame: 0, acc: 0 },
   sel: null,            // [x, y, w, h] marked on the stage, in art pixels
+  lastAnim: new Map(),  // "<asset>/<group>" -> the animation last viewed in that group
   scope: null,          // composer scope picked by hand; null = follow the stage
   focus: null,          // critique highlighted on the stage
   pendingFocus: null,
@@ -105,8 +106,12 @@ async function loadProject() {
       if (prev?.rev === a.rev && prev.img) a.img = prev.img;
       else { a.img = await loadImage(a.sheet); if (prev) changed.push(a.name); }
     } else if (prev && prev.type !== 'error') changed.push(a.name);
-    next.set(a.name, a);
+    if (a.groups) {   // tabs, the strip order and ↑/↓ follow the groups
+      const by = new Map(a.anims.map((x) => [x.name, x]));
+      a.anims = a.groups.flatMap((g) => g.anims.map((n) => by.get(n)));
+    }
   }));
+  for (const a of p.assets) next.set(a.name, a);   // the server's order, not whichever sheet loaded first
   S.assets = next;
   S.project = p;
   S.rev = p.rev;
@@ -478,6 +483,16 @@ function renderWs() {
     <div class="ws-name">${esc(p?.game ?? 'pixelforge')}</div><div class="ws-ver">pixelforge ${esc(p?.version ?? '')}</div></span>`;
 }
 
+// sidebar sections folded by clicking their heading; remembered in this browser only
+const FOLD_KEY = 'pixelforge.folded';
+let folded = new Set();
+try { folded = new Set(JSON.parse(localStorage.getItem(FOLD_KEY)) ?? []); } catch { /* no storage: start unfolded */ }
+function toggleFold(type) {
+  if (!folded.delete(type)) folded.add(type);
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify([...folded])); } catch { /* not remembered */ }
+  renderNav();
+}
+
 function renderNav() {
   const r = S.route;
   const open = activeCrits().length;
@@ -487,17 +502,22 @@ function renderNav() {
                   { type: 'error', label: 'Not loading', items: [...S.assets.values()].filter((a) => a.type === 'error') }];
   for (const g of groups) {
     if (!g.items.length) continue;
-    html += `<div class="nav-head">${g.label}</div>`;
+    const shut = folded.has(g.type);
+    const crits = activeCrits((c) => g.items.some((a) => a.name === c.target.asset)).length;
+    html += `<button class="nav-head ${shut ? 'shut' : ''}" data-fold="${g.type}" aria-expanded="${!shut}">${icon('right', 'chev')}<span>${g.label}</span>
+      ${shut ? (crits ? `<span class="badge" title="${crits} open">${crits}</span>` : `<span class="n">${g.items.length}</span>`) : ''}</button>`;
     for (const a of g.items) {
       const n = activeCrits((c) => c.target.asset === a.name);
       const working = n.some((c) => c.status === 'working');
-      html += `<a class="asset-row ${r.page === 'asset' && r.name === a.name ? 'on' : ''} ${a.variantOf ? 'variant' : ''}" href="#/a/${enc(a.name)}"
+      const on = r.page === 'asset' && r.name === a.name;   // a folded section still shows the asset you're on
+      html += `<a class="asset-row ${on ? 'on' : ''} ${shut && !on ? 'folded' : ''} ${a.variantOf ? 'variant' : ''}" href="#/a/${enc(a.name)}"
         ${a.variantOf ? `title="A palette variant of ${esc(a.variantOf)}"` : ''}>
         ${a.type === 'error' ? `<span class="warn" style="width:24px;display:grid;place-items:center">${icon('alert')}</span>` : `<canvas width="48" height="48" data-nav="${esc(a.name)}"></canvas>`}
         <span class="nm">${esc(a.name)}</span>${n.length ? `<span class="badge ${working ? 'working' : ''}" title="${n.length} open">${n.length}</span>` : ''}</a>`;
     }
   }
   $('#nav').innerHTML = html;
+  for (const b of $$('[data-fold]')) b.onclick = () => toggleFold(b.dataset.fold);
   for (const c of $$('canvas[data-nav]')) paintFit(c, assetOf(c.dataset.nav), { size: 48, crop: true });
 }
 
@@ -739,14 +759,14 @@ function assetPage(page) {
 }
 
 function stageShell(hasStrip) {
-  return `<div class="asset"><div class="tabs" id="tabs"></div>
+  return `<div class="asset"><div class="groups" id="groups" hidden></div><div class="tabs" id="tabs"></div>
     <div class="stage-wrap"><div class="stage" id="stage"><canvas id="stage-canvas"></canvas></div>
       <div class="toolbar" id="toolbar"></div><div id="selinfo"></div></div>
     ${hasStrip ? '<div class="strip" id="strip"></div>' : ''}</div>`;
 }
 
 function gameShell(src) {
-  return `<div class="asset"><div class="tabs" id="tabs"></div><div class="stage-wrap"><iframe class="game" src="${src}" title="In-game test"></iframe></div></div>`;
+  return `<div class="asset"><div class="groups" id="groups" hidden></div><div class="tabs" id="tabs"></div><div class="stage-wrap"><iframe class="game" src="${src}" title="In-game test"></iframe></div></div>`;
 }
 
 // sprite ---------------------------------------------------------------
@@ -865,7 +885,22 @@ function spritePage(page, a) {
 function renderSpriteTabs(a, anim) {
   const el = $('#tabs');
   if (!el) return;
-  el.innerHTML = a.anims.map((x) => {
+  // with "groups" in sprite.json: a row of groups, and the tabs show only the current group's animations
+  const groups = a.groups ?? [];
+  const key = (g) => `${a.name}/${g.name}`;
+  const cur = groups.find((g) => g.anims.includes(anim?.name))
+    ?? groups.find((g) => g.anims.includes(S.lastAnim.get(a.name))) ?? groups[0];
+  if (anim && cur) { S.lastAnim.set(key(cur), anim.name); S.lastAnim.set(a.name, anim.name); }
+  const gel = $('#groups');
+  gel.hidden = !groups.length;
+  gel.innerHTML = groups.map((g) => {
+    const to = S.lastAnim.get(key(g)) ?? g.anims[0];
+    const nc = activeCrits((c) => c.target.asset === a.name && g.anims.includes(c.target.anim)).length;
+    return `<a class="grp ${g === cur ? 'on' : ''}" href="#/a/${enc(a.name)}/${enc(to)}">${esc(g.name)}
+      ${nc ? `<span class="badge">${nc}</span>` : `<span class="n">${g.anims.length}</span>`}</a>`;
+  }).join('');
+  const shown = cur ? a.anims.filter((x) => cur.anims.includes(x.name)) : a.anims;
+  el.innerHTML = shown.map((x) => {
     const nc = activeCrits((c) => c.target.asset === a.name && c.target.anim === x.name).length;
     return `<a class="tab ${anim === x ? 'on' : ''}" href="#/a/${enc(a.name)}/${enc(x.name)}">${esc(x.name)}
       ${nc ? `<span class="badge">${nc}</span>` : `<span class="n">${x.frames.length}</span>`}</a>`;
@@ -1054,7 +1089,16 @@ function levelPage(page, a) {
     <button class="btn icon ${S.view.grid ? 'on' : ''}" id="gridbtn" title="Tile grid" aria-pressed="${S.view.grid}" aria-label="Tile grid">${icon('tiles')}</button>`;
   $('#prev').onclick = () => stage.step(-1);
   $('#next').onclick = () => stage.step(1);
-  wireZoom(() => { draw(); revealLevel(...a.screens[S.lv.screen], ...a.screen); });
+  // zoom about the cursor (pinch) or the middle of the view (buttons), so it stays on whatever you'd scrolled to
+  wireZoom(draw, (ax, ay) => {
+    const st = $('#stage'), z = S.view.zoom;
+    ax ??= st.clientWidth / 2; ay ??= st.clientHeight / 2;
+    const px = (st.scrollLeft + ax - canvas.offsetLeft) / z, py = (st.scrollTop + ay - canvas.offsetTop) / z;
+    return () => {
+      st.scrollLeft = canvas.offsetLeft + px * S.view.zoom - ax;
+      st.scrollTop = canvas.offsetTop + py * S.view.zoom - ay;
+    };
+  });
   const toggle = (id, get, set) => { $(id).onclick = (e) => { set(!get()); e.currentTarget.classList.toggle('on', get()); e.currentTarget.setAttribute('aria-pressed', get()); draw(); }; };
   toggle('#screensbtn', () => S.lv.screens, (v) => { S.lv.screens = v; });
   toggle('#gridbtn', () => S.view.grid, (v) => { S.view.grid = v; });
@@ -1099,15 +1143,33 @@ function renderLevelTabs(a, view) {
 }
 
 // stage controls -------------------------------------------------------
-function wireZoom(draw) {
-  for (const b of $$('[data-z]')) b.onclick = () => {
-    const steps = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
-    const z = S.view.zoom ?? 4;
-    const i = steps.findIndex((s) => s >= z);
+const ZOOMS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
+// keep(x, y): called before the zoom changes with the point to zoom about (stage coordinates; none = the
+// middle), returns what to do once it's redrawn (e.g. scroll so that point stays put)
+function wireZoom(draw, keep) {
+  const zoomBy = (dir, ax, ay) => {
+    const z = S.view.zoom ?? 4, i = ZOOMS.findIndex((s) => s >= z);
+    const next = dir > 0 ? ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS[i] === z ? i + 1 : i)] : ZOOMS[Math.max(0, (i < 0 ? ZOOMS.length : i) - 1)];
+    if (next === z) return;
+    const after = keep?.(ax, ay);
     S.view.userZoom = true;
-    S.view.zoom = +b.dataset.z > 0 ? steps[Math.min(steps.length - 1, (steps[i] === z ? i + 1 : i))] : steps[Math.max(0, (i < 0 ? steps.length : i) - 1)];
+    S.view.zoom = next;
     draw();
+    after?.();
   };
+  for (const b of $$('[data-z]')) b.onclick = () => zoomBy(+b.dataset.z);
+  // a trackpad pinch (Chrome sends it as Ctrl + wheel) or Ctrl + wheel zooms the art, not the whole page
+  const st = $('#stage');
+  let acc = 0;
+  st?.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    acc += e.deltaY;
+    if (Math.abs(acc) < 40) return;   // a pinch comes in small steps; a wheel notch is ~100
+    const r = st.getBoundingClientRect();
+    zoomBy(acc < 0 ? 1 : -1, e.clientX - r.left, e.clientY - r.top);
+    acc = 0;
+  }, { passive: false });
 }
 
 let stageObserver = null;
@@ -1450,8 +1512,15 @@ function render({ keep = false } = {}) {
   renderWatch();
   renderTop();
   const scroll = $('#page').scrollTop;
+  // the page is rebuilt on every tab click: keep the tab rows where they were scrolled to
+  const rows = sameAsset ? ['#groups', '#tabs'].map((s) => $(s) && { s, left: $(s).scrollLeft, sig: $(s).textContent }) : [];
   renderPage();
   if (keep) $('#page').scrollTop = scroll;
+  for (const row of rows) {
+    const el = row && $(row.s);
+    if (el && el.textContent === row.sig) el.scrollLeft = row.left;
+  }
+  $$('#groups .grp.on, #tabs .tab.on').forEach((el) => el.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
   if (keep && $('#crit-text')) { updateComposer(); renderRailList(); }
   else renderRail();
   renderSelInfo();

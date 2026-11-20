@@ -69,7 +69,9 @@ def build_sheet(sprite: Sprite, padding: int = 1) -> tuple[Image.Image, dict]:
                            "anchor": sprite.anchor, "body": dict(zip("xywh", sprite.body_rect())),
                            "animations": anim_info, **({"prop": prop_info(sprite)} if sprite.kind == "prop" else {}),
                            **({"fx": {"layer": sprite.layer}} if sprite.kind == "fx" else {}),
-                           **({"variant_of": sprite.base} if sprite.base else {})},
+                           **({"variant_of": sprite.base} if sprite.base else {}),
+                           **({"groups": [{"name": g, "anims": a} for g, a in sprite.animation_groups()]}
+                              if sprite.groups else {})},
         },
     }
     return img, data

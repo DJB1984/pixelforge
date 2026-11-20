@@ -19,6 +19,7 @@
   "roles": {
     "hair_*": "none"
   },
+  "groups": {"Ground": ["idle", "walk", "run"], "Jump": ["jump_rise", "jump_fall", "jump_land"]},
   "animations": {
     "idle": {
       "fps": 2,

@@ -1,5 +1,7 @@
+import json
 import unittest
 
+from pixelforge.export import build_sheet
 from pixelforge.model import Sprite, SpriteError
 from pixelforge.validate import check_sprite
 
@@ -52,6 +54,33 @@ class ModelTest(unittest.TestCase):
             self.assertIn("t:dot[0]: floating pixels (no opaque neighbours) at (0,0)", joined)
             self.assertIn("lowest opaque row varies", joined)
             self.assertIn("broken.txt: not used by any animation", joined)
+
+    def test_animation_groups(self):
+        with TempProject() as p:
+            names = ["idle", "walk_down", "attack_up", "walk_up", "hurt", "attack_down"]
+            d = p.sprite("t", (4, 4), {"k": "#000000"}, {"a": F0}, {n: {"frames": ["a"]} for n in names})
+            s = Sprite.load("t")
+            self.assertEqual(s.animation_groups(), [("", names)])
+            meta = json.loads((d / "sprite.json").read_text())
+            # written order wins inside a group, globs keep sprite.json order, the first match wins
+            meta["groups"] = {"Move": ["walk_*", "idle"], "Combat": ["attack_*", "walk_up"], "Empty": ["nope"]}
+            (d / "sprite.json").write_text(json.dumps(meta))
+            s = Sprite.load("t")
+            self.assertEqual(s.animation_groups(), [("Move", ["walk_down", "walk_up", "idle"]),
+                                                    ("Combat", ["attack_up", "attack_down"]), ("Other", ["hurt"])])
+            joined = "\n".join(str(i) for i in check_sprite("t"))
+            self.assertIn("t/groups: Empty: 'nope' matches no animation", joined)
+            _, data = build_sheet(s)
+            self.assertEqual(data["meta"]["pixelforge"]["groups"][0], {"name": "Move", "anims": ["walk_down", "walk_up", "idle"]})
+            meta["groups"] = {"Move": "walk_*"}
+            (d / "sprite.json").write_text(json.dumps(meta))
+            with self.assertRaisesRegex(SpriteError, "groups must be"):
+                Sprite.load("t")
+
+    def test_many_animations_suggest_groups(self):
+        with TempProject() as p:
+            p.sprite("t", (4, 4), {"k": "#000000"}, {"a": F0}, {f"a{i}": {"frames": ["a"]} for i in range(9)})
+            self.assertIn("9 animations and no \"groups\"", "\n".join(str(i) for i in check_sprite("t")))
 
 
 if __name__ == "__main__":

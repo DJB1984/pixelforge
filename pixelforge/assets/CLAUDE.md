@@ -27,6 +27,16 @@ previews/                     generated: renders, sheets, GIFs (gitignored)
   Applied in order: `from` (base, may itself be an object) → `layers` painted bottom-to-top → `flip` → `offset` → `roll` (offset that wraps around the edges) → `replace` (palette swap, e.g. white hit flash). `duration` (ms) overrides `1000/fps`.
 - A **part entry** places a small grid from `parts/` instead of a whole-canvas frame: `{"part": "window", "at": [8, 54]}`, or `"at": [[8, 54], [44, 54]]` to stamp it several times. `flip` and `replace` apply to the part itself. Use it in `layers` or as `from`.
 - `loop: false` animations play once.
+- **Groups** organize a sprite's animations in the dashboard, the gallery and `list`. Add them whenever a sprite
+  has more than a handful of animations (`check` suggests it past 8), and put each new animation in a group:
+  ```json
+  "groups": {"Movement": ["idle", "walk", "run"], "Combat": ["attack*", "hurt"], "Jump": ["jump_*"]}
+  ```
+  Groups show in the order written, and each one's animations in the order its names and globs are listed. An
+  animation goes in the first group that matches it, and anything unmatched lands in a last "Other" group. In the
+  dashboard, the groups are a row above the animation tabs, and the tabs show only the current group. Group by
+  what the developer looks for together (an action's directions, a moveset), not by name alone. `check` warns
+  about an entry that matches no animation.
 
 ## Game settings: view and resolution
 `pixelforge.json` says how the game looks, and `new`, `check` and the Phaser helper follow it:

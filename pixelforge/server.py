@@ -214,6 +214,8 @@ def _asset(name: str) -> dict:
         })
     out = {**base, "type": s.kind, "class": s.size_class, "origin": list(s.origin), "anchor": s.anchor,
            "body": list(s.body_rect()), "anims": anims, "view": s.view}
+    if s.groups:
+        out["groups"] = [{"name": g, "anims": names} for g, names in s.animation_groups()]
     if s.kind == "prop":
         out["prop"] = {**prop_info(s), "slice": list(s.slice) if s.slice else None}
     if s.kind == "fx":

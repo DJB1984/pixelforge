@@ -272,6 +272,8 @@ class Sprite:
     # palette variants: `base` is the sprite a variant is drawn from; a base lists its `variants`
     base: str | None = None
     variants: list[str] = field(default_factory=list)
+    # how the dashboard, gallery and `list` organize the animations: group name -> animation names/globs
+    groups: dict[str, list[str]] = field(default_factory=dict)
     _frame_cache: dict[str, Grid] = field(default_factory=dict, repr=False)
 
     @property
@@ -339,6 +341,10 @@ class Sprite:
             frames = a.get("frames", [])
             # an effect plays once and is gone, so its animations don't loop unless they say so
             anims[aname] = Animation(aname, float(a.get("fps", 8)), bool(a.get("loop", kind != "fx")), frames)
+        groups = meta.get("groups", {})
+        if not (isinstance(groups, dict) and all(isinstance(v, list) and all(isinstance(n, str) for n in v)
+                                                 for v in groups.values())):
+            raise SpriteError("groups must be {\"Group name\": [\"anim\", \"glob*\", ...]}")
         # the topdown/overhead classes are only for those views, so they imply it
         view = meta.get("view") or (size_class if size_class in ("topdown", "overhead") else game_view())
         if view not in VIEWS:
@@ -363,7 +369,7 @@ class Sprite:
         s = cls(meta.get("name", name), path, w, h, origin, palette_raw, palette, anims,
                 size_class, body, roles, int(meta.get("hit_pad", 0)), int(meta.get("hurt_pad", 0)), anchor,
                 kind, tiles, tile_props, columns, meta.get("sample"), tile_anims, view, stamps=stamps,
-                item_meta=item_meta, autotile=autotile, base=base,
+                item_meta=item_meta, autotile=autotile, base=base, groups=groups,
                 variants=[] if base else [n for n in own_variants if variants().get(n) == path.name])
         if kind == "prop":
             s._load_prop(meta)
@@ -437,6 +443,27 @@ class Sprite:
                 return entry
             t -= ms
         return frames[-1][0]
+
+    def animation_groups(self) -> list[tuple[str, list[str]]]:
+        """The animations in `groups` order: each group's names and globs in the order written, an
+        animation in the first group that matches it, the rest in a final "Other" group. Without
+        "groups", one unnamed group of everything."""
+        if not self.groups:
+            return [("", list(self.animations))]
+        out, placed = [], set()
+        for gname, patterns in self.groups.items():
+            names = []
+            for pattern in patterns:
+                for a in self.animations:
+                    if a not in placed and fnmatch.fnmatchcase(a, pattern):
+                        placed.add(a)
+                        names.append(a)
+            if names:
+                out.append((gname, names))
+        rest = [a for a in self.animations if a not in placed]
+        if rest:
+            out.append(("Other", rest))
+        return out
 
     def tile_properties(self, name: str) -> dict:
         """Every matching `properties` glob, merged in order (later patterns win). Icons add their

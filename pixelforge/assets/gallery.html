@@ -56,6 +56,7 @@
   .swatches i { width: 16px; height: 16px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2);
                 display: block; }
 
+  .grid .group { grid-column: 1 / -1; margin: 8px 0 -6px; font-size: 13px; font-weight: 600; color: var(--muted); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile)), 1fr)); gap: 16px; }
   .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
           display: grid; gap: 10px; align-content: start; min-width: 0; }
@@ -336,7 +337,11 @@ async function init() {
       <div class="swatches">${s.palette.map(([k, hex, label]) => `<i style="background:${hex}" title="${k}  ${label}"></i>`).join('')}</div></div>
       <div class="grid"></div>`;
     const grid = sec.querySelector('.grid');
-    s.anims.forEach((a) => grid.append(buildTile(s, a)));
+    const byName = new Map(s.anims.map((a) => [a.name, a]));
+    for (const g of s.groups ?? [{ anims: s.anims.map((a) => a.name) }]) {
+      if (g.name) { const h = document.createElement('h3'); h.className = 'group'; h.textContent = g.name; grid.append(h); }
+      g.anims.forEach((n) => grid.append(buildTile(s, byName.get(n))));
+    }
     $('main').append(sec);
   }
   for (const ts of tilesets) $('main').append(buildTileset(ts));

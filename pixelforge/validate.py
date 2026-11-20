@@ -13,6 +13,7 @@ from .model import (ROLES, Sprite, SpriteError, describe_entry, game_resolution,
 
 MAX_PALETTE = 16
 BIG_DIFF_RATIO = 0.45
+GROUP_AT = 8   # more animations than this without "groups" gets a nudge to organize them
 
 
 @dataclass
@@ -151,6 +152,13 @@ def check_sprite(name: str) -> list[Issue]:
     # ---- animations ----
     if not s.animations:
         issues.append(Issue("warn", name, "no animations defined"))
+    for gname, patterns in s.groups.items():
+        for pattern in patterns:
+            if not any(fnmatch.fnmatchcase(a, pattern) for a in s.animations):
+                issues.append(Issue("warn", f"{name}/groups", f"{gname}: {pattern!r} matches no animation"))
+    if not s.groups and len(s.animations) > GROUP_AT:
+        issues.append(Issue("info", f"{name}/groups", f"{len(s.animations)} animations and no \"groups\": group them "
+                                                      f"so the dashboard shows them group by group"))
     ox, oy = s.origin
     seen_floating: set[tuple] = set()
     for aname, a in s.animations.items():

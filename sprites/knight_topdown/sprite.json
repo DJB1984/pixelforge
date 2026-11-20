@@ -25,6 +25,7 @@
   },
   "hit_pad": 1,
   "hurt_pad": -1,
+  "groups": {"Idle": ["idle_*"], "Walk": ["walk_*"], "Attack": ["attack_*"]},
   "animations": {
     "idle_down": {
       "fps": 4,

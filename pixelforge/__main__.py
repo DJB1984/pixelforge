@@ -76,7 +76,8 @@ def cmd_list(args):
             print(f"{n:16} {s.width}x{s.height}  {len(s.palette)} colors  {s.kind}: {len(s.tiles)} {noun} ({names})"
                   + (f"  stamps: {', '.join(s.stamps)}" if s.stamps else ""))
             continue
-        anims = ", ".join(f"{k}({len(a.frames)})" for k, a in s.animations.items())
+        anims = " | ".join((f"{g}: " if g else "") + ", ".join(f"{k}({len(s.animations[k].frames)})" for k in names)
+                           for g, names in s.animation_groups())
         what = (f"prop ({s.layer}{', solid' if s.solid else ''}{f', scroll {s.scroll:g}' if s.scroll != 1 else ''}"
                 f"{', sliced' if s.slice else ''})  ") if s.kind == "prop" else f"fx ({s.layer})  " if s.kind == "fx" else ""
         if s.base:

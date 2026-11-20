@@ -51,6 +51,7 @@ def gallery_data(names: list[str] | None = None) -> dict:
             "palette": [[k, to_hex(s.palette[k]), v] for k, v in s.palette_raw.items()],
             "sheet": _data_uri(img),
             "anims": anims,
+            **({"groups": data["meta"]["pixelforge"]["groups"]} if "groups" in data["meta"]["pixelforge"] else {}),
         })
     game = project_config().get("name") or root().name
     return {"game": game, "generated": date.today().isoformat(), "sprites": sprites, "tilesets": tilesets,
